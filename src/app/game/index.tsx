@@ -4,13 +4,15 @@ import { globalStyles, colors } from '../../styles/global';
 import { gameStyles } from '../../styles/game';
 
 const genieImages = {
-  neutro:    require('../../assets/genio-neutro.png'),
-  feliz:     require('../../assets/genio-feliz.png'),
-  pensativo: require('../../assets/genio-pensativo.png'),
-  surpreso:  require('../../assets/genio-surpreso.png'),
-  confiante: require('../../assets/genio-confiante.png'),
-  frustrado: require('../../assets/genio-frustrado.png'),
-  esnobe:    require('../../assets/genio-esnobe.png'),
+  neutro:      require('../../assets/genio_neutro.png'),
+  concentrado: require('../../assets/genio_concentrado.png'),
+  confiante:   require('../../assets/genio_confiante.png'),
+  desesperado: require('../../assets/genio_desesperado.png'),
+  despeitado:  require('../../assets/genio_despeitado.png'),
+  esnobe:      require('../../assets/genio_esnobe.png'),
+  inquieto:    require('../../assets/genio_inquieto.png'),
+  irritado:    require('../../assets/genio_irritado.png'),
+  reflexivo:   require('../../assets/genio_reflexivo.png'),
 } as const;
 
 type GenieReaction = keyof typeof genieImages;
@@ -21,10 +23,10 @@ interface Question {
 }
 
 const mockQuestions: Question[] = [
-  { text: 'Seu personagem é uma pessoa real?', reaction: 'neutro' },
-  { text: 'Ele é famoso no mundo inteiro?',    reaction: 'pensativo' },
-  { text: 'É do mundo do entretenimento?',     reaction: 'pensativo' },
-  { text: 'Ele ainda está vivo?',              reaction: 'surpreso' },
+  { text: 'Seu personagem é uma pessoa real?', reaction: 'neutro'      },
+  { text: 'Ele é famoso no mundo inteiro?',    reaction: 'reflexivo'   },
+  { text: 'É do mundo do entretenimento?',     reaction: 'concentrado' },
+  { text: 'Ele ainda está vivo?',              reaction: 'inquieto'    },
 ];
 
 const buttons = [
