@@ -17,7 +17,7 @@ export default function Login() {
     <View style={globalStyles.container}>
 
       <Image
-        source={require('../assets/genio_confiante.png')}
+        source={require('../../assets/genio_confiante.png')}
         style={authStyles.image}
         resizeMode="contain"
       />
@@ -44,7 +44,7 @@ export default function Login() {
           onChangeText={setPassword}
         />
 
-        <TouchableOpacity style={authStyles.forgotPassword}>
+        <TouchableOpacity style={authStyles.forgotPassword} onPress={() => router.push('/auth/forgot')}>
           <Text style={authStyles.forgotPasswordText}>Esqueci minha senha</Text>
         </TouchableOpacity>
       </View>

@@ -19,7 +19,7 @@ export default function Register() {
     <View style={globalStyles.container}>
 
       <Image
-        source={require('../assets/genio_confiante.png')}
+        source={require('../../assets/genio_confiante.png')}
         style={authStyles.image}
         resizeMode="contain"
       />

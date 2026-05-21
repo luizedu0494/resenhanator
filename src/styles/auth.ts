@@ -41,4 +41,13 @@ export const authStyles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
+
+  sentText: {
+  color: colors.gray,
+  fontSize: 14,
+  textAlign: 'center',
+  lineHeight: 22,
+  marginVertical: 20,
+  paddingHorizontal: 20,
+},
 });

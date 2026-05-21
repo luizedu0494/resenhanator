@@ -77,12 +77,12 @@ export default function Onboarding() {
       {currentIndex === slides.length - 1 ? (
         <TouchableOpacity
           style={globalStyles.button}
-          onPress={() => router.push('/auth')}
+          onPress={() =>router.push('/auth/login')}
         >
           <Text style={globalStyles.buttonText}>Vamos começar!</Text>
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity onPress={() => router.push('/auth')}>
+        <TouchableOpacity onPress={() => router.push('/auth/login')}>
           <Text style={onboardingStyles.skip}>Pular</Text>
         </TouchableOpacity>
       )}
