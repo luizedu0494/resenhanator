@@ -1,25 +1,58 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { globalStyles } from '../../styles/global';
 import { authStyles } from '../../styles/auth';
+import { register } from '../../services/auth';
 
 export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  function handleRegister() {
-    // integração firebase depois
-    router.push('/home');
+  async function handleRegister() {
+    setError('');
+
+    if (!name || !email || !password || !confirmPassword) {
+      setError('Preencha todos os campos.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await register(name, email, password);
+      router.push('/home');
+    } catch (err: any) {
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Este e-mail já está em uso.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('E-mail inválido.');
+      } else {
+        setError('Erro ao criar conta. Tente novamente.');
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <View style={globalStyles.container}>
 
       <Image
-        source={require('../../assets/genio_confiante.png')}
+        source={require('../assets/genio_confiante.png')}
         style={authStyles.image}
         resizeMode="contain"
       />
@@ -63,13 +96,19 @@ export default function Register() {
           value={confirmPassword}
           onChangeText={setConfirmPassword}
         />
+
+        {error ? <Text style={authStyles.error}>{error}</Text> : null}
       </View>
 
       <TouchableOpacity
         style={globalStyles.button}
         onPress={handleRegister}
+        disabled={loading}
       >
-        <Text style={globalStyles.buttonText}>Cadastrar</Text>
+        {loading
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={globalStyles.buttonText}>Cadastrar</Text>
+        }
       </TouchableOpacity>
 
       <TouchableOpacity

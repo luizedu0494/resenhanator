@@ -10,7 +10,6 @@
     "experiments": {
       "typedRoutes": true
     },
-    
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -35,7 +34,8 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-web-browser"
     ]
   }
 }

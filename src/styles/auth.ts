@@ -43,11 +43,18 @@ export const authStyles = StyleSheet.create({
   },
 
   sentText: {
-  color: colors.gray,
-  fontSize: 14,
+    color: colors.gray,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginVertical: 20,
+    paddingHorizontal: 20,
+  },
+
+  error: {
+  color: '#ff4444',
+  fontSize: 13,
   textAlign: 'center',
-  lineHeight: 22,
-  marginVertical: 20,
-  paddingHorizontal: 20,
-},
+  marginTop: 4,
+  },
 });

@@ -1,23 +1,48 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { globalStyles } from '../../styles/global';
 import { authStyles } from '../../styles/auth';
+import { login } from '../../services/auth';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  function handleLogin() {
-    // integração firebase depois
-    router.push('/home');
+  async function handleLogin() {
+    setError('');
+
+    if (!email || !password) {
+      setError('Preencha todos os campos.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await login(email, password);
+      router.push('/home');
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('E-mail ou senha incorretos.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('E-mail inválido.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Muitas tentativas. Tente novamente mais tarde.');
+      } else {
+        setError('Erro ao entrar. Tente novamente.');
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <View style={globalStyles.container}>
 
       <Image
-        source={require('../../assets/genio_confiante.png')}
+        source={require('../assets/genio_confiante.png')}
         style={authStyles.image}
         resizeMode="contain"
       />
@@ -44,7 +69,12 @@ export default function Login() {
           onChangeText={setPassword}
         />
 
-        <TouchableOpacity style={authStyles.forgotPassword} onPress={() => router.push('/auth/forgot')}>
+        {error ? <Text style={authStyles.error}>{error}</Text> : null}
+
+        <TouchableOpacity
+          style={authStyles.forgotPassword}
+          onPress={() => router.push('/auth/forgot')}
+        >
           <Text style={authStyles.forgotPasswordText}>Esqueci minha senha</Text>
         </TouchableOpacity>
       </View>
@@ -52,8 +82,12 @@ export default function Login() {
       <TouchableOpacity
         style={globalStyles.button}
         onPress={handleLogin}
+        disabled={loading}
       >
-        <Text style={globalStyles.buttonText}>Entrar</Text>
+        {loading
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={globalStyles.buttonText}>Entrar</Text>
+        }
       </TouchableOpacity>
 
       <TouchableOpacity

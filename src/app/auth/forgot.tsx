@@ -1,16 +1,39 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { globalStyles } from '../../styles/global';
 import { authStyles } from '../../styles/auth';
+import { forgotPassword } from '../../services/auth';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
 
-  function handleSend() {
-    // integração firebase depois
-    setSent(true);
+  async function handleSend() {
+    setError('');
+
+    if (!email) {
+      setError('Digite seu e-mail.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await forgotPassword(email);
+      setSent(true);
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found') {
+        setError('Nenhuma conta encontrada com este e-mail.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('E-mail inválido.');
+      } else {
+        setError('Erro ao enviar e-mail. Tente novamente.');
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (sent) {
@@ -56,13 +79,19 @@ export default function ForgotPassword() {
           value={email}
           onChangeText={setEmail}
         />
+
+        {error ? <Text style={authStyles.error}>{error}</Text> : null}
       </View>
 
       <TouchableOpacity
         style={globalStyles.button}
         onPress={handleSend}
+        disabled={loading}
       >
-        <Text style={globalStyles.buttonText}>Enviar</Text>
+        {loading
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={globalStyles.buttonText}>Enviar</Text>
+        }
       </TouchableOpacity>
 
       <TouchableOpacity
