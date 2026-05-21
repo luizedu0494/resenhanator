@@ -7,7 +7,7 @@ export default function Home() {
   return (
     <View style={globalStyles.container}>
         
-         <View style={homeStyles.characterContainer}>
+         <View>
             <Image
                 source={require('../assets/genio.png')}
                 style={homeStyles.image}
