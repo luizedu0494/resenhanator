@@ -4,13 +4,11 @@ import { router } from 'expo-router';
 import { globalStyles } from '../../styles/global';
 import { authStyles } from '../../styles/auth';
 
-export default function Register() {
-  const [name, setName] = useState('');
+export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
 
-  function handleRegister() {
+  function handleLogin() {
     // integração firebase depois
     router.push('/home');
   }
@@ -24,18 +22,9 @@ export default function Register() {
         resizeMode="contain"
       />
 
-      <Text style={globalStyles.title}>Criar conta</Text>
+      <Text style={globalStyles.title}>Entrar</Text>
 
       <View style={authStyles.form}>
-        <TextInput
-          style={authStyles.input}
-          placeholder="Nome"
-          placeholderTextColor="#8d8d99"
-          autoCapitalize="words"
-          value={name}
-          onChangeText={setName}
-        />
-
         <TextInput
           style={authStyles.input}
           placeholder="E-mail"
@@ -55,29 +44,24 @@ export default function Register() {
           onChangeText={setPassword}
         />
 
-        <TextInput
-          style={authStyles.input}
-          placeholder="Confirmar senha"
-          placeholderTextColor="#8d8d99"
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-        />
+        <TouchableOpacity style={authStyles.forgotPassword}>
+          <Text style={authStyles.forgotPasswordText}>Esqueci minha senha</Text>
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
         style={globalStyles.button}
-        onPress={handleRegister}
+        onPress={handleLogin}
       >
-        <Text style={globalStyles.buttonText}>Cadastrar</Text>
+        <Text style={globalStyles.buttonText}>Entrar</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={authStyles.registerLink}
-        onPress={() => router.push('/auth/login')}
+        onPress={() => router.push('/auth/register')}
       >
         <Text style={authStyles.registerLinkText}>
-          Já tem conta? <Text style={authStyles.registerLinkBold}>Entrar</Text>
+          Não tem conta? <Text style={authStyles.registerLinkBold}>Cadastre-se</Text>
         </Text>
       </TouchableOpacity>
 
