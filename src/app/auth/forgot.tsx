@@ -40,7 +40,7 @@ export default function ForgotPassword() {
     return (
       <View style={globalStyles.container}>
         <Image
-          source={require('../assets/genio_confiante.png')}
+          source={require('../../assets/genio_confiante.png')}
           style={authStyles.image}
           resizeMode="contain"
         />
@@ -62,7 +62,7 @@ export default function ForgotPassword() {
     <View style={globalStyles.container}>
 
       <Image
-        source={require('../assets/genio_reflexivo.png')}
+        source={require('../../assets/genio_reflexivo.png')}
         style={authStyles.image}
         resizeMode="contain"
       />

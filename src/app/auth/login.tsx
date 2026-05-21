@@ -16,8 +16,9 @@ export default function Login() {
   const [error, setError] = useState('');
 
   const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  });
+});
 
   React.useEffect(() => {
     if (response?.type === 'success') {
