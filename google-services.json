@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "716159182481",
+    "project_id": "resenhanator",
+    "storage_bucket": "resenhanator.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:716159182481:android:c57f6b076bdcdf10534130",
+        "android_client_info": {
+          "package_name": "com.luiz.resenhanator"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "716159182481-lpbbi3er0tl3ic55h7kcdgi7s7hkh83k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD18wt4UoJDfMWdmY08wvRidHhWIohB9ac"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "716159182481-lpbbi3er0tl3ic55h7kcdgi7s7hkh83k.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
