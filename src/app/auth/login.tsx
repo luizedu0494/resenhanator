@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import { globalStyles } from '../../styles/global';
 import { authStyles } from '../../styles/auth';
-import { login, loginWithGoogle } from '../../services/auth';
-
-WebBrowser.maybeCompleteAuthSession();
+import { login } from '../../services/auth';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -15,36 +11,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
-  androidClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID, 
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-});
-
-  React.useEffect(() => {
-    if (response?.type === 'success') {
-      const { id_token } = response.params;
-      handleGoogleLogin(id_token);
-    }
-  }, [response]);
-
-  async function handleGoogleLogin(idToken: string) {
-    try {
-      setLoading(true);
-      await loginWithGoogle(idToken);
-      router.push('/home');
-    } catch (err) {
-      setError('Erro ao entrar com Google. Tente novamente.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleLogin() {
     setError('');
+
     if (!email || !password) {
       setError('Preencha todos os campos.');
       return;
     }
+
     try {
       setLoading(true);
       await login(email, password);
@@ -114,14 +88,6 @@ export default function Login() {
           ? <ActivityIndicator color="#fff" />
           : <Text style={globalStyles.buttonText}>Entrar</Text>
         }
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={authStyles.googleButton}
-        onPress={() => promptAsync()}
-        disabled={!request || loading}
-      >
-        <Text style={authStyles.googleButtonText}>Entrar com Google</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
