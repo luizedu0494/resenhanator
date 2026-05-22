@@ -5,12 +5,15 @@ export const resultStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    backgroundColor: colors.background,
   },
 
-  // Cabeçalho de resultado
   outcomeLabel: {
     fontSize: 13,
     fontWeight: '700',
@@ -18,7 +21,7 @@ export const resultStyles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 6,
   },
-  outcomeLabelWon: { color: '#2ecc71' },
+  outcomeLabelWon:  { color: '#2ecc71' },
   outcomeLabelLost: { color: '#e74c3c' },
 
   headline: {
@@ -30,7 +33,6 @@ export const resultStyles = StyleSheet.create({
     lineHeight: 34,
   },
 
-  // Área da imagem (foto do personagem ou gênio)
   imageWrapper: {
     width: 220,
     height: 260,
@@ -39,15 +41,17 @@ export const resultStyles = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 2,
   },
-  imageWrapperWon: { borderColor: '#2ecc71' },
+  imageWrapperWon:  { borderColor: '#2ecc71' },
   imageWrapperLost: { borderColor: '#e74c3c' },
-
-  characterImage: {
+  characterImage: { width: '100%', height: '100%' },
+  imagePlaceholder: {
     width: '100%',
     height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1e1e24',
   },
 
-  // Nome do personagem
   characterName: {
     fontSize: 22,
     fontWeight: '700',
@@ -59,14 +63,86 @@ export const resultStyles = StyleSheet.create({
     fontSize: 14,
     color: colors.gray,
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 20,
   },
 
-  // Botões de ação
+  // Campo "quem era o personagem?"
+  revealBox: {
+    width: '100%',
+    backgroundColor: '#1e1e24',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#2e2e3a',
+  },
+  revealLabel: {
+    color: colors.gray,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  revealRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  revealInput: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#121214',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    color: colors.text,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#2e2e3a',
+  },
+  revealBtn: {
+    height: 44,
+    paddingHorizontal: 18,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  revealBtnDisabled: {
+    opacity: 0.4,
+  },
+  revealBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  revealSavedName: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  // Share
+  btnShare: {
+    width: '100%',
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  btnShareText: {
+    color: colors.primary,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+
   actionsRow: {
     flexDirection: 'row',
     gap: 12,
     width: '100%',
+    marginBottom: 36,
   },
   btnPrimary: {
     flex: 1,
@@ -85,23 +161,51 @@ export const resultStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnPrimaryText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  btnSecondaryText: {
-    color: colors.gray,
-    fontWeight: '600',
-    fontSize: 15,
-  },
+  btnPrimaryText:   { color: '#fff', fontWeight: '700', fontSize: 15 },
+  btnSecondaryText: { color: colors.gray, fontWeight: '600', fontSize: 15 },
 
-  // Loading da imagem
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
+  // Histórico
+  historySection: { width: '100%' },
+  scoreboard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#1e1e24',
+    borderRadius: 16,
+    paddingVertical: 18,
+    marginBottom: 24,
   },
+  scoreItem:        { flex: 1, alignItems: 'center' },
+  scoreNumber:      { fontSize: 36, fontWeight: '800', color: '#2ecc71' },
+  scoreNumberLoss:  { color: '#e74c3c' },
+  scoreLabel: {
+    fontSize: 12,
+    color: colors.gray,
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  scoreDivider: { width: 1, height: 40, backgroundColor: '#2e2e36' },
+  historyTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.gray,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e1e24',
+    gap: 12,
+  },
+  badge: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  badgeWon:  { backgroundColor: '#1a6b2a' },
+  badgeLost: { backgroundColor: '#8b0000' },
+  badgeText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  historyInfo: { flex: 1 },
+  historyCharacter: { color: colors.text, fontWeight: '600', fontSize: 15 },
+  historyMeta:      { color: colors.gray, fontSize: 12, marginTop: 2 },
 });

@@ -1,42 +1,82 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  ActivityIndicator,
+  View, Text, Image, TouchableOpacity,
+  ActivityIndicator, Share, ScrollView,
+  TextInput, Keyboard,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../styles/global';
 import { resultStyles } from '../../styles/result';
 import { searchCharacterImage } from '../../services/imageSearch';
+import { saveResult, revealCharacter, loadHistory, HistoryEntry } from '../../services/history';
 
 const genieImages = {
   confiante:   require('../../assets/genio_confiante.png'),
   desesperado: require('../../assets/genio_desesperado.png'),
 };
 
-export default function Result() {
-  const { won, character, questions } = useLocalSearchParams<{ won: string; character: string; questions: string }>();
-  const didWin = won === 'true';
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
 
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [loadingImage, setLoadingImage] = useState(true);
+export default function Result() {
+  const { won, character, questions } = useLocalSearchParams<{
+    won: string; character: string; questions: string;
+  }>();
+  const didWin = won === 'true';
+  const numQ   = Number(questions) || 0;
+
+  const [imageUri, setImageUri]         = useState<string | null>(null);
+  const [loadingImage, setLoading]      = useState(true);
+  const [history, setHistory]           = useState<HistoryEntry[]>([]);
+  const [revealed, setRevealed]         = useState('');
+  const [revealSaved, setRevealSaved]   = useState(false);
+  const [entryId, setEntryId]           = useState<string | null>(null);
 
   useEffect(() => {
-    if (character) {
-      searchCharacterImage(character).then((uri) => {
-        setImageUri(uri);
-        setLoadingImage(false);
-      });
+    async function init() {
+      if (!character) return;
+      const id = Date.now().toString();
+      setEntryId(id);
+      await saveResult({ character: character ?? '', won: didWin, questions: numQ });
+      const h = await loadHistory();
+      setHistory(h);
+      // pega o id real (primeiro da lista, que acabou de ser salvo)
+      if (h.length > 0) setEntryId(h[0].id);
+      const uri = await searchCharacterImage(character);
+      setImageUri(uri);
+      setLoading(false);
     }
+    init();
   }, []);
 
+  async function handleReveal() {
+    if (!revealed.trim() || !entryId) return;
+    await revealCharacter(entryId, revealed.trim());
+    setRevealSaved(true);
+    Keyboard.dismiss();
+    // Atualiza lista local também
+    setHistory(h => h.map(e => e.id === entryId ? { ...e, revealedCharacter: revealed.trim() } : e));
+  }
+
+  async function handleShare() {
+    const who = didWin ? character : (revealSaved ? revealed : character);
+    const msg = didWin
+      ? `🧞 O Resenhanator me pegou! Adivinhou "${who}" em ${numQ} perguntas! Consegue enganar? 👉 resenhanator.app`
+      : `😏 Enganei o Resenhanator! Pensei em "${who}" e ele não conseguiu adivinhar em ${numQ} perguntas. Tenta aí! 👉 resenhanator.app`;
+    await Share.share({ message: msg });
+  }
+
+  const wins   = history.filter(h => h.won).length;
+  const losses = history.filter(h => !h.won).length;
   const fallbackGenie = didWin ? genieImages.confiante : genieImages.desesperado;
 
   return (
-    <View style={resultStyles.container}>
-
+    <ScrollView
+      contentContainerStyle={resultStyles.scrollContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
       {/* Label */}
       <Text style={[resultStyles.outcomeLabel, didWin ? resultStyles.outcomeLabelWon : resultStyles.outcomeLabelLost]}>
         {didWin ? '✦ acertei ✦' : '✦ não era esse ✦'}
@@ -49,35 +89,61 @@ export default function Result() {
           : `Não era ${character}?\nMe enganaram dessa vez.`}
       </Text>
 
-      {/* Foto do personagem nos dois casos */}
+      {/* Foto */}
       <View style={[resultStyles.imageWrapper, didWin ? resultStyles.imageWrapperWon : resultStyles.imageWrapperLost]}>
         {loadingImage ? (
           <View style={resultStyles.imagePlaceholder}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            style={resultStyles.characterImage}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: imageUri }} style={resultStyles.characterImage} resizeMode="cover" />
         ) : (
-          // Fallback: gênio confiante ou desesperado
-          <Image
-            source={fallbackGenie}
-            style={resultStyles.characterImage}
-            resizeMode="contain"
-          />
+          <Image source={fallbackGenie} style={resultStyles.characterImage} resizeMode="contain" />
         )}
       </View>
 
-      {/* Nome e subtítulo */}
       <Text style={resultStyles.characterName}>{character}</Text>
       <Text style={resultStyles.characterSub}>
         {didWin
-          ? `Adivinhei em ${questions} pergunta${Number(questions) === 1 ? '' : 's'}`
+          ? `Adivinhei em ${numQ} pergunta${numQ === 1 ? '' : 's'}`
           : 'Quem era o personagem? Tente de novo!'}
       </Text>
+
+      {/* Campo "quem era?" — só aparece quando a IA erra */}
+      {!didWin && (
+        <View style={resultStyles.revealBox}>
+          <Text style={resultStyles.revealLabel}>
+            {revealSaved ? '✓ Obrigado! Vou aprender com isso.' : 'Quem era o personagem?'}
+          </Text>
+          {!revealSaved ? (
+            <View style={resultStyles.revealRow}>
+              <TextInput
+                style={resultStyles.revealInput}
+                placeholder="Ex: Ronaldo Fenômeno"
+                placeholderTextColor={colors.gray}
+                value={revealed}
+                onChangeText={setRevealed}
+                returnKeyType="done"
+                onSubmitEditing={handleReveal}
+              />
+              <TouchableOpacity
+                style={[resultStyles.revealBtn, !revealed.trim() && resultStyles.revealBtnDisabled]}
+                onPress={handleReveal}
+                disabled={!revealed.trim()}
+              >
+                <Text style={resultStyles.revealBtnText}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={resultStyles.revealSavedName}>{revealed}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Share */}
+      <TouchableOpacity style={resultStyles.btnShare} onPress={handleShare}>
+        <Text style={resultStyles.btnShareText}>📤  Compartilhar resultado</Text>
+      </TouchableOpacity>
 
       {/* Ações */}
       <View style={resultStyles.actionsRow}>
@@ -89,6 +155,44 @@ export default function Result() {
         </TouchableOpacity>
       </View>
 
-    </View>
+      {/* Histórico */}
+      {history.length > 0 && (
+        <View style={resultStyles.historySection}>
+          <View style={resultStyles.scoreboard}>
+            <View style={resultStyles.scoreItem}>
+              <Text style={resultStyles.scoreNumber}>{wins}</Text>
+              <Text style={resultStyles.scoreLabel}>vitórias</Text>
+            </View>
+            <View style={resultStyles.scoreDivider} />
+            <View style={resultStyles.scoreItem}>
+              <Text style={[resultStyles.scoreNumber, resultStyles.scoreNumberLoss]}>{losses}</Text>
+              <Text style={resultStyles.scoreLabel}>derrotas</Text>
+            </View>
+          </View>
+
+          <Text style={resultStyles.historyTitle}>Últimas partidas</Text>
+
+          {history.map((item) => (
+            <View key={item.id} style={resultStyles.historyRow}>
+              <View style={[resultStyles.badge, item.won ? resultStyles.badgeWon : resultStyles.badgeLost]}>
+                <Text style={resultStyles.badgeText}>{item.won ? '✓' : '✕'}</Text>
+              </View>
+              <View style={resultStyles.historyInfo}>
+                <Text style={resultStyles.historyCharacter}>
+                  {item.won
+                    ? item.character
+                    : item.revealedCharacter
+                      ? `${item.revealedCharacter} (chutei: ${item.character})`
+                      : item.character}
+                </Text>
+                <Text style={resultStyles.historyMeta}>
+                  {item.questions} perguntas · {formatDate(item.date)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </ScrollView>
   );
 }
