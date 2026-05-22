@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
 import { globalStyles, colors } from '../../styles/global';
 import { gameStyles } from '../../styles/game';
+import { getNextQuestion, GameState } from '../../services/groq';
+import { GameButton } from '../../components/GameButton';
 
 const genieImages = {
   neutro:      require('../../assets/genio_neutro.png'),
@@ -17,64 +20,108 @@ const genieImages = {
 
 type GenieReaction = keyof typeof genieImages;
 
-interface Question {
-  text: string;
-  reaction: GenieReaction;
-}
-
-const mockQuestions: Question[] = [
-  { text: 'Seu personagem é uma pessoa real?', reaction: 'neutro'      },
-  { text: 'Ele é famoso no mundo inteiro?',    reaction: 'reflexivo'   },
-  { text: 'É do mundo do entretenimento?',     reaction: 'concentrado' },
-  { text: 'Ele ainda está vivo?',              reaction: 'inquieto'    },
-];
-
-const buttons = [
-  { label: 'Sim',               color: colors.btnSim    },
-  { label: 'Não',               color: colors.btnNao    },
-  { label: 'Talvez',            color: colors.btnTalvez },
-  { label: 'Não sei',           color: colors.gray      },
-  { label: 'Provavelmente sim', color: colors.btnSim    },
-  { label: 'Provavelmente não', color: colors.btnNao    },
+const buttons: { label: string; type: 'sim' | 'nao' | 'talvez' | 'naosei' | 'provsim' | 'provnao' }[] = [
+  { label: 'Sim',               type: 'sim'     },
+  { label: 'Não',               type: 'nao'     },
+  { label: 'Talvez',            type: 'talvez'  },
+  { label: 'Não sei',           type: 'naosei'  },
+  { label: 'Provavelmente sim', type: 'provsim' },
+  { label: 'Provavelmente não', type: 'provnao' },
 ];
 
 export default function Game() {
-  const [index, setIndex] = useState(0);
-  const current = mockQuestions[index];
+  const [question, setQuestion] = useState('');
+  const [reaction, setReaction] = useState<GenieReaction>('neutro');
+  const [loading, setLoading] = useState(true);
+  const [gameState, setGameState] = useState<GameState>({ history: [] });
+  const [questionNumber, setQuestionNumber] = useState(1);
+  const [isGuess, setIsGuess] = useState(false);
+  const [character, setCharacter] = useState('');
 
-  function handleAnswer(answer: string) {
-    console.log(`Pergunta: "${current.text}" | Resposta: "${answer}"`);
-    if (index < mockQuestions.length - 1) {
-      setIndex(index + 1);
+  useEffect(() => {
+    fetchNextQuestion({ history: [] });
+  }, []);
+
+  async function fetchNextQuestion(state: GameState) {
+    try {
+      setLoading(true);
+      const result = await getNextQuestion(state);
+      setQuestion(result.question);
+      setReaction((result.reaction as GenieReaction) || 'neutro');
+      setIsGuess(result.isGuess);
+      if (result.character) setCharacter(result.character);
+    } catch (err) {
+    console.log('ERRO GROQ:', err); 
+    setQuestion('Hmm, deixa eu pensar... O personagem é famoso?');
+    setReaction('reflexivo');
+    } finally {
+      setLoading(false);
     }
+  }
+
+  async function handleAnswer(answer: string) {
+    if (loading) return;
+
+    const newHistory = [...gameState.history, { question, answer }];
+    const newState = { history: newHistory };
+    setGameState(newState);
+    setQuestionNumber(questionNumber + 1);
+
+    if (isGuess) {
+      router.push({
+        pathname: '/game/result',
+        params: { won: answer === 'Sim' ? 'true' : 'false', character },
+      });
+      return;
+    }
+
+    await fetchNextQuestion(newState);
   }
 
   return (
     <View style={globalStyles.container}>
 
       <View style={gameStyles.characterContainer}>
-        <Image
-          source={genieImages[current.reaction]}
-          style={gameStyles.image}
-          resizeMode="contain"
-        />
-        <View style={gameStyles.bubble}>
-          <Text style={gameStyles.bubbleText}>{current.text}</Text>
-          <View style={gameStyles.arrowRight} />
-        </View>
+        {loading ? (
+          <View style={gameStyles.loadingContainer}>
+            <Image
+              source={genieImages.reflexivo}
+              style={gameStyles.image}
+              resizeMode="contain"
+            />
+            <ActivityIndicator
+              size="large"
+              color={colors.primary}
+              style={gameStyles.loadingIndicator}
+            />
+          </View>
+        ) : (
+          <Image
+            source={genieImages[reaction]}
+            style={gameStyles.image}
+            resizeMode="contain"
+          />
+        )}
+
+        {!loading && (
+          <View style={gameStyles.bubble}>
+            <Text style={gameStyles.bubbleText}>{question}</Text>
+            <View style={gameStyles.arrowRight} />
+          </View>
+        )}
       </View>
 
-      <Text style={gameStyles.counter}>Pergunta {index + 1}</Text>
+      <Text style={gameStyles.counter}>Pergunta {questionNumber}</Text>
 
       <View style={gameStyles.buttonsContainer}>
         {buttons.map((btn) => (
-          <TouchableOpacity
+          <GameButton
             key={btn.label}
-            style={[gameStyles.button, { backgroundColor: btn.color }]}
+            label={btn.label}
+            type={btn.type}
             onPress={() => handleAnswer(btn.label)}
-          >
-            <Text style={globalStyles.buttonText}>{btn.label}</Text>
-          </TouchableOpacity>
+            disabled={loading}
+          />
         ))}
       </View>
 
