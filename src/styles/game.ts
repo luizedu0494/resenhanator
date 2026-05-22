@@ -51,12 +51,16 @@ export const gameStyles = StyleSheet.create({
   },
   buttonsContainer: {
     width: '100%',
-    gap: 10,
+    gap: 8,
     paddingHorizontal: 20,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   button: {
-    height: 50,
-    borderRadius: 8,
+    height: 44,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
