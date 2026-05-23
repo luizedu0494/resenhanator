@@ -11,6 +11,7 @@ import { searchCharacterImage } from '../../services/imageSearch';
 import { saveResult, revealCharacter, loadHistory, HistoryEntry } from '../../services/history';
 import { publishResult } from '../../services/social';
 import { saveGameKnowledge } from '../../services/aiKnowledge';
+import { saveFeedbackWrongGuess } from '../../services/feedbackService';
 import { inferCategory } from '../../services/groq';
 
 const genieImages = {
@@ -47,13 +48,24 @@ export default function Result() {
       await saveResult({ character: character ?? '', won: didWin, questions: numQ });
       // Publica no feed global (não bloqueia se falhar)
       publishResult({ character: character ?? '', won: didWin, questions: numQ }).catch(() => {});
+      const category = inferCategory(parsedHistory);
       // Salva conhecimento coletivo no Firestore (não bloqueia se falhar)
       saveGameKnowledge({
         characterName: character ?? '',
         wasGuessed: didWin,
-        category: inferCategory(parsedHistory) ?? undefined,
+        category: category ?? undefined,
         gameHistory: parsedHistory,
       }).catch(() => {});
+      
+      // Se a IA errou, registra feedback de chute errado para aprendizado
+      if (!didWin) {
+        saveFeedbackWrongGuess({
+          guessedCharacter: character ?? '',
+          actualCharacter: '',
+          category: category ?? '',
+          gameHistory: parsedHistory,
+        }).catch(() => {});
+      }
       const h = await loadHistory();
       setHistory(h);
       // pega o id real (primeiro da lista, que acabou de ser salvo)
@@ -68,12 +80,24 @@ export default function Result() {
   async function handleReveal() {
     if (!revealed.trim() || !entryId) return;
     await revealCharacter(entryId, revealed.trim());
+    
+    const category = inferCategory(parsedHistory);
     // Salva no Firestore o personagem real que o jogador pensou
     saveGameKnowledge({
       characterName: revealed.trim(),
       wasGuessed: false,
+      category: category ?? undefined,
       gameHistory: parsedHistory,
     }).catch(() => {});
+    
+    // Registra o feedback de chute errado com o personagem correto
+    saveFeedbackWrongGuess({
+      guessedCharacter: character ?? '',
+      actualCharacter: revealed.trim(),
+      category: category ?? '',
+      gameHistory: parsedHistory,
+    }).catch(() => {});
+    
     setRevealSaved(true);
     Keyboard.dismiss();
     setHistory(h => h.map(e => e.id === entryId ? { ...e, revealedCharacter: revealed.trim() } : e));

@@ -15,6 +15,7 @@
 
 import { loadAiMemory } from './history';
 import { getTopQuestions } from './aiKnowledge';
+import { getRecentInvalidQuestionFeedback } from './feedbackService';
 
 export interface GameState {
   history: { question: string; answer: string }[];
@@ -45,7 +46,7 @@ function alreadyAskedRealPerson(history: { question: string; answer: string }[])
  * VALIDAÇÃO RIGOROSA: Detecta se uma pergunta é respondível com Sim/Não
  * Retorna true se a pergunta é válida (Sim/Não), false se é composta ou aberta
  */
-function isValidYesNoQuestion(question: string): boolean {
+export function isValidYesNoQuestion(question: string): boolean {
   const q = question.toLowerCase().trim();
   
   // Padrões que indicam perguntas INVÁLIDAS (compostas ou abertas)
@@ -60,6 +61,8 @@ function isValidYesNoQuestion(question: string): boolean {
     /de\s+qual\s+(país|série|filme|universo)/i, // "De qual país...", "De qual série..."
     /qual\s+é\s+a\s+(profissão|área|série|filme)/i, // "Qual é a profissão..."
     /em\s+qual\s+(ano|década|série|filme)/i, // "Em qual ano...", "Em qual série..."
+    /\s+ou\s+/i,                          // "É X ou Y?" (pergunta composta)
+    /\s+e\s+/i,                           // "É X e Y?" (pergunta composta)
   ];
   
   for (const pattern of invalidPatterns) {
@@ -192,10 +195,20 @@ export async function getNextQuestion(gameState: GameState): Promise<{
   }
 
   // ── Dados paralelos ────────────────────────────────────────────────────────
-  const [memory, topQuestions] = await Promise.all([
+  const [memory, topQuestions, recentFeedback] = await Promise.all([
     loadAiMemory(),
     getTopQuestions(15),
+    getRecentInvalidQuestionFeedback(10),
   ]);
+
+  const feedbackCtx = recentFeedback.length > 0
+    ? `\n\n⚠️ ERROS RECENTES (Você errou e o usuário te corrigiu nestas perguntas):\n`
+      + recentFeedback.map(f => `- Pergunta: "${f.question}" | Motivo: Pergunta composta ou aberta.`).join('\n')
+    : '';
+
+  if (recentFeedback.length > 0) {
+    console.log(`[groq] Carregados ${recentFeedback.length} feedbacks para aprendizado.`);
+  }
 
   const neverRepeat = memory.map(m => m.character);
   const playerLikes = memory.filter(m => !m.wasGuessed).map(m => m.character);
@@ -258,7 +271,7 @@ ${Object.values(comicUniverses).map(u => `- ${u.name}: ${u.description}`).join('
           role: 'system',
           content:
 `Você é o Resenhanator, um gênio arrogante e divertido que tenta adivinhar personagens.
-Você está na pergunta número ${questionNumber}.${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${aiStrengthCtx}${askedCtx}${effectiveQuestionsCtx}${comicContext}
+Você está na pergunta número ${questionNumber}.${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${aiStrengthCtx}${askedCtx}${effectiveQuestionsCtx}${feedbackCtx}${comicContext}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REGRA DE OURO — NUNCA VIOLE (VALIDAÇÃO RIGOROSA)
@@ -277,9 +290,10 @@ TODA pergunta DEVE ser respondível com SIM ou NÃO. Sem exceções.
 ✗ PERGUNTAS INVÁLIDAS (Compostas/Abertas):
   - "É de qual país?" (pergunta aberta)
   - "Qual a área?" (pergunta aberta)
-  - "É de filme ou série?" (pergunta composta com "ou")
-  - "De qual universo é?" (pergunta aberta)
-  - "Como é seu nome?" (pergunta aberta)
+  - "É de filme ou série?" (pergunta composta com "ou" - PROIBIDO)
+  - "É homem ou mulher?" (pergunta composta com "ou" - PROIBIDO)
+  - "De qual universo é?" (pergunta aberta - PROIBIDO)
+  - "Como é seu nome?" (pergunta aberta - PROIBIDO)
 
 Se você gerar uma pergunta inválida, o jogador receberá um botão de FEEDBACK para orientá-lo.
 
@@ -300,7 +314,7 @@ Não faça perguntas genéricas. Escolha perguntas que ELIMINAM GRANDES GRUPOS:
 ✓ ESTRATÉGICO (elimina muitos):
   - "É do sexo masculino?" (elimina ~50% dos personagens)
   - "Ainda está vivo?" (separa históricos de atuais)
-  - "É da Marvel ou DC?" (elimina não-quadrinhos)
+  - "É um herói da Marvel?" (específico, Sim/Não)
   - "É um vilão?" (divide heróis de vilões)
   - "Tem poderes sobrenaturais?" (separa fantasia de realista)
 

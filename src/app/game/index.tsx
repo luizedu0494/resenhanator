@@ -3,7 +3,7 @@ import { View, Text, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { globalStyles, colors } from '../../styles/global';
 import { gameStyles } from '../../styles/game';
-import { getNextQuestion, GameState } from '../../services/groq';
+import { getNextQuestion, GameState, isValidYesNoQuestion } from '../../services/groq';
 import { GameButton } from '../../components/GameButton';
 import { FeedbackButton } from '../../components/FeedbackButton';
 
@@ -190,6 +190,13 @@ export default function Game() {
         setCharacter(guessedName);
         log('FORCE_GUESS_SET', { character: guessedName });
         return;
+      }
+
+      // Valida a pergunta gerada
+      const isValidQuestion = isValidYesNoQuestion(result.question);
+      if (!isValidQuestion) {
+        log('INVALID_QUESTION_DETECTED', { question: result.question });
+        setFeedback('invalid_question');
       }
 
       setQuestion(result.question);
