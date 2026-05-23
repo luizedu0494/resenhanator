@@ -40,7 +40,7 @@ export default function Home() {
           <Text style={homeStyles.greetingText}>Olá,</Text>
           <Text style={homeStyles.greetingName}>{displayName} 👋</Text>
         </View>
-        <TouchableOpacity style={homeStyles.avatarTouch} onPress={() => router.push('./profile')}>
+        <TouchableOpacity style={homeStyles.avatarTouch} onPress={() => router.push('/profile')}>
           {photoUri ? (
             <Image source={{ uri: photoUri }} style={homeStyles.avatarSmall} />
           ) : (
@@ -60,6 +60,10 @@ export default function Home() {
 
       <TouchableOpacity style={globalStyles.button} onPress={() => router.push('/game')}>
         <Text style={globalStyles.buttonText}>Começar Jogo</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={homeStyles.communityBtn} onPress={() => router.push('./social')}>
+        <Text style={homeStyles.communityBtnText}>🌍  Comunidade</Text>
       </TouchableOpacity>
 
       {/* Histórico */}

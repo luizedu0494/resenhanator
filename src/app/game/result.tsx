@@ -9,6 +9,7 @@ import { colors } from '../../styles/global';
 import { resultStyles } from '../../styles/result';
 import { searchCharacterImage } from '../../services/imageSearch';
 import { saveResult, revealCharacter, loadHistory, HistoryEntry } from '../../services/history';
+import { publishResult } from '../../services/social';
 
 const genieImages = {
   confiante:   require('../../assets/genio_confiante.png'),
@@ -39,6 +40,8 @@ export default function Result() {
       const id = Date.now().toString();
       setEntryId(id);
       await saveResult({ character: character ?? '', won: didWin, questions: numQ });
+      // Publica no feed global (não bloqueia se falhar)
+      publishResult({ character: character ?? '', won: didWin, questions: numQ }).catch(() => {});
       const h = await loadHistory();
       setHistory(h);
       // pega o id real (primeiro da lista, que acabou de ser salvo)

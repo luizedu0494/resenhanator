@@ -54,9 +54,23 @@ export const homeStyles = StyleSheet.create({
     fontSize: 18,
   },
 
+  communityBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  communityBtnText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
   image: {
-    width: 220,
-    height: 260,
+    width: 300,
+    height: 340,
     resizeMode: 'contain',
   },
 
