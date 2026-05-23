@@ -1,13 +1,57 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform, StatusBar } from 'react-native';
 import { colors } from './global';
+
+const AVATAR_SM = 44;
 
 export const homeStyles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingTop: (Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0) + 16,
+    paddingBottom: 40,
     paddingHorizontal: 24,
     backgroundColor: colors.background,
+  },
+
+  // Top bar: saudação + avatar
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 16,
+  },
+  topBarLeft: {
+    flex: 1,
+  },
+  greetingText: {
+    fontSize: 13,
+    color: colors.gray,
+  },
+  greetingName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  avatarTouch: {
+    marginLeft: 12,
+  },
+  avatarSmall: {
+    width: AVATAR_SM,
+    height: AVATAR_SM,
+    borderRadius: AVATAR_SM / 2,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  avatarFallback: {
+    backgroundColor: '#1e1e24',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    color: colors.primary,
+    fontWeight: '800',
+    fontSize: 18,
   },
 
   image: {
@@ -16,6 +60,7 @@ export const homeStyles = StyleSheet.create({
     resizeMode: 'contain',
   },
 
+  // Histórico
   historySection: {
     width: '100%',
     marginTop: 32,
@@ -28,7 +73,6 @@ export const homeStyles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 18,
     marginBottom: 24,
-    gap: 0,
   },
   scoreItem: {
     flex: 1,
@@ -54,8 +98,6 @@ export const homeStyles = StyleSheet.create({
     height: 40,
     backgroundColor: '#2e2e36',
   },
-
-  // Lista
   historyTitle: {
     fontSize: 13,
     fontWeight: '700',
@@ -86,9 +128,7 @@ export const homeStyles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
-  historyInfo: {
-    flex: 1,
-  },
+  historyInfo: { flex: 1 },
   historyCharacter: {
     color: colors.text,
     fontWeight: '600',

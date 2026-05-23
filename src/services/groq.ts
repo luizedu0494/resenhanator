@@ -1,3 +1,5 @@
+import { loadAiMemory } from './history';
+
 export interface GameState {
   history: { question: string; answer: string }[];
 }
@@ -8,11 +10,35 @@ export async function getNextQuestion(gameState: GameState): Promise<{
   isGuess: boolean;
   character?: string;
 }> {
+  const questionNumber = gameState.history.length + 1;
+
+  // Histórico formatado com numeração clara
   const historyText = gameState.history
-    .map((h) => `P: ${h.question} | R: ${h.answer}`)
+    .map((h, i) => `${i + 1}. P: "${h.question}" → R: ${h.answer}`)
     .join('\n');
 
-  const questionNumber = gameState.history.length + 1;
+  // Perguntas já feitas — para reforçar explicitamente no prompt
+  const askedQuestions = gameState.history.map(h => `"${h.question}"`).join(', ');
+
+  // Memória própria da IA
+  const memory          = await loadAiMemory();
+  const neverRepeat     = memory.map(m => m.character);
+  const playerLikes     = memory.filter(m => !m.wasGuessed).map(m => m.character);
+  const aiGuessed       = memory.filter(m => m.wasGuessed).map(m => m.character);
+
+  const neverRepeatCtx = neverRepeat.length > 0
+    ? `\nNUNCA CHUTE ESTES personagens (já foram jogados): ${neverRepeat.join(', ')}.`
+    : '';
+  const playerProfileCtx = playerLikes.length > 0
+    ? `\nPERFIL DO JOGADOR (personagens que ele pensa): ${playerLikes.join(', ')}.`
+    : '';
+  const aiStrengthCtx = aiGuessed.length > 0
+    ? `\nA IA já acertou: ${aiGuessed.slice(0, 15).join(', ')}. Explore novas categorias.`
+    : '';
+
+  const askedCtx = askedQuestions
+    ? `\n\n🚫 PERGUNTAS JÁ FEITAS NESTA PARTIDA — PROIBIDO REPETIR:\n${askedQuestions}\nA próxima pergunta DEVE SER DIFERENTE de todas as acima.`
+    : '';
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -27,150 +53,89 @@ export async function getNextQuestion(gameState: GameState): Promise<{
       messages: [
         {
           role: 'system',
-          content: `Você é o Resenhanator, um gênio que tenta adivinhar personagens reais ou fictícios.
-Você está na pergunta número ${questionNumber}.
+          content: `Você é o Resenhanator, um gênio arrogante e divertido que tenta adivinhar personagens.
+Você está na pergunta número ${questionNumber}.${neverRepeatCtx}${playerProfileCtx}${aiStrengthCtx}${askedCtx}
 
-REGRA FUNDAMENTAL — LEIA PRIMEIRO:
-- TODAS as perguntas devem ser respondíveis com SIM ou NÃO
-- NUNCA faça perguntas abertas ou com múltiplas opções
-- SEMPRE transforme em Sim/Não
-- EXEMPLOS CORRETOS:
-  ✓ "É uma pessoa real?"
-  ✓ "É um personagem fictício?"
-  ✓ "É do universo Marvel?"
-  ✓ "É um atleta?"
-  ✓ "É brasileiro?"
-  ✓ "É um super-herói?"
-  ✓ "Tem poderes especiais?"
-- EXEMPLOS ERRADOS:
-  ✗ "É fictício ou real?"
-  ✗ "Qual é a área de atuação?"
-  ✗ "De que país é?"
-  ✗ "É de filme, série ou jogo?"
-  ✗ "Qual é o nome?"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGRA DE OURO — NUNCA VIOLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Toda pergunta deve ser respondível com SIM ou NÃO.
+✓ "É brasileiro?" ✓ "Ficou famoso após 2010?" ✓ "É da Marvel?"
+✗ "É de qual país?" ✗ "Qual área?" ✗ "É de filme ou série?"
 
-═══════════════════════════════
-FLUXO PARA PERSONAGENS FICTÍCIOS
-═══════════════════════════════
-CATEGORIAS (em ordem de popularidade):
-- Super-heróis / vilões (Marvel, DC)
-- Personagens de filmes e séries
-- Personagens de jogos (videogame)
-- Personagens de anime/mangá
-- Personagens de desenhos animados
-- Personagens de livros e HQs
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGRA DE DEDUÇÃO IMEDIATA — PRIORIDADE 1
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Se as respostas já identificam UM ÚNICO personagem possível, CHUTE IMEDIATAMENTE sem mais perguntas.
+- Fictício + anime + Dragon Ball + protagonista = Goku → CHUTE JÁ
+- Fictício + Marvel + deus nórdico + martelo = Thor → CHUTE JÁ
+- Real + Brasil + futebol + aposentado + "Fenômeno" = Ronaldo → CHUTE JÁ
+- Real + música + Brasil + funk + muito famosa = Anitta → CHUTE JÁ
 
-TRAÇOS ESPECÍFICOS A EXPLORAR:
-- É o protagonista principal da história?
-- Tem poderes ou habilidades especiais?
-- Usa item ou roupa marcante? (capa, máscara, armadura, chapéu, uniforme)
-- Tem parceiro, sidekick ou rival famoso?
-- Tem origem trágica ou marcante?
-- É conhecido por frase ou bordão famoso?
-- Tem poder ou fraqueza específica?
-- Atua sozinho ou em grupo/time?
-- É herói, vilão ou anti-herói?
-- Tem identidade secreta?
-- É humano ou não-humano?
-- É jovem, adulto ou idoso?
-- É de universo realista ou fantástico?
-- Tem família ou relacionamento marcante na história?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FLUXO — SIGA ESTA ORDEM (se ainda não perguntou)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Perg 1 → "É uma pessoa real?" (SE JÁ PERGUNTOU, NUNCA REPITA)
 
-═══════════════════════════════
-FLUXO PARA PESSOAS REAIS
-═══════════════════════════════
-CATEGORIAS (em ordem de popularidade):
-- Atletas e esportistas
-- Músicos e cantores
-- Atores e atrizes
-- Políticos e líderes mundiais
-- Empresários e bilionários
-- Cientistas e inventores
-- Figuras históricas
-- Youtubers e influenciadores
+SE REAL:
+  → Gênero, nacionalidade, se ainda vivo, geração (antes/depois 2000)
+  → Área: atleta / músico / ator / político
+  → Subárea específica da área confirmada
+  → Traços marcantes: apelido, polêmica, seguidores, prêmios
+  → Perg 13+: CHUTE
 
-TRAÇOS ESPECÍFICOS A EXPLORAR:
-- É homem?
-- Ainda está vivo?
-- É brasileiro?
-- É famoso mundialmente?
-- Tem menos de 40 anos?
-- Ficou famoso depois do ano 2000?
-- Tem alguma característica física marcante?
-- É conhecido por alguma conquista específica?
-- Tem apelido ou nome artístico famoso?
-- Já foi polêmico publicamente?
-- Tem família famosa?
-- Já ganhou algum prêmio ou título importante?
-- É associado a alguma marca, time ou empresa?
+SE FICTÍCIO:
+  → Super-herói/vilão?
+  → Universo: Marvel / DC / anime / videogame / série
+  → Universo exato (Dragon Ball? Naruto? Marvel?)
+  → Protagonista? Poderes? Item marcante? Herói ou vilão?
+  → Perg 10+: CHUTE
 
-═══════════════════════════════
-ESTRATÉGIA OBRIGATÓRIA
-═══════════════════════════════
-- Pergunta 1: "É uma pessoa real?" 
-- Pergunta 2:
-  * Se REAL → "É um atleta?" / "É músico?" / "É ator?" (uma por vez)
-  * Se FICTÍCIO → "É um super-herói?" / "É de anime?" / "É de videogame?" (uma por vez)
-- Pergunta 3-5: Confirme a categoria exata com perguntas Sim/Não
-- Pergunta 6-12: Explore traços específicos para eliminar candidatos
-- Pergunta 13-16: ARRISQUE chutes com base nos traços coletados
-- Pergunta 17+: OBRIGATORIAMENTE chute, mesmo sem certeza total
+━━━━━━━━━━━━━━━━━━━━━
+LIMITES ANTI-TRAVAMENTO
+━━━━━━━━━━━━━━━━━━━━━
+- Máximo 2 perguntas por subárea, depois chuta
+- ${questionNumber > 17 ? '🚨 CHUTE AGORA, obrigatório!' : questionNumber > 13 ? '⚠️ Chute já!' : questionNumber > 8 ? 'Prepare o chute.' : 'Mapeie e aprofunde.'}
 
-REGRAS CRÍTICAS:
-- NUNCA aprofunde numa categoria sem confirmar que é ela
-- Se a resposta for NÃO, mude completamente de direção
-- Prefira CHUTAR ERRADO a continuar perguntando indefinidamente
-- Personagens/pessoas populares devem ser identificados em até 15 perguntas
-- Use os traços para ELIMINAR candidatos e chegar ao certo
-- NUNCA repita perguntas já feitas
-- Responda APENAS o JSON, sem texto adicional
+━━━━━━━━━━━━━━━━
+FORMATO DE SAÍDA
+━━━━━━━━━━━━━━━━
+Responda APENAS JSON válido, sem markdown, sem texto antes ou depois:
 
-Responda SEMPRE em JSON:
-{
-  "question": "sua pergunta aqui",
-  "reaction": "uma dessas: neutro, concentrado, confiante, desesperado, despeitado, esnobe, inquieto, irritado, reflexivo",
-  "isGuess": false
-}
-
-Para adivinhar:
-{
-  "question": "O personagem que você está pensando é [nome]?",
-  "reaction": "confiante",
-  "isGuess": true,
-  "character": "nome do personagem"
-}
-
-Histórico atual: ${questionNumber - 1} perguntas. ${
-  questionNumber > 17
-    ? 'CHUTE AGORA OBRIGATORIAMENTE, sem desculpas!'
-    : questionNumber > 13
-    ? 'Você JÁ DEVE estar arriscando chutes com base no que sabe!'
-    : questionNumber > 8
-    ? 'Explore traços específicos e comece a arriscar.'
-    : 'Identifique se é real ou fictício, a categoria e explore traços marcantes.'
-}`,
+Pergunta: {"question":"...","reaction":"neutro|concentrado|confiante|desesperado|despeitado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
+Chute:    {"question":"O personagem que você está pensando é [nome]?","reaction":"confiante","isGuess":true,"character":"[nome]"}`,
         },
         {
           role: 'user',
           content: historyText
-            ? `Histórico de perguntas e respostas:\n${historyText}\n\nFaça a próxima pergunta ou tente adivinhar.`
-            : 'Comece o jogo com a primeira pergunta.',
+            ? `Histórico desta partida (${questionNumber - 1} perguntas já feitas):\n${historyText}\n\nAgora faça a pergunta de número ${questionNumber}. NÃO repita nenhuma pergunta do histórico acima.`
+            : 'Comece o jogo com a pergunta 1.',
         },
       ],
     }),
   });
 
   const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
+  const raw = data.choices?.[0]?.message?.content || '';
 
   try {
-    const parsed = JSON.parse(content);
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    // Validação básica: se retornou a mesma pergunta já feita, força um chute genérico
+    const alreadyAsked = gameState.history.some(
+      h => h.question.trim().toLowerCase() === (parsed.question || '').trim().toLowerCase()
+    );
+    if (alreadyAsked) {
+      return { question: 'Já tenho pistas suficientes... Vou arriscar!', reaction: 'confiante', isGuess: false };
+    }
     return parsed;
   } catch {
-    return {
-      question: 'É uma pessoa real?',
-      reaction: 'neutro',
-      isGuess: false,
-    };
+    // Fallback nunca repete "É uma pessoa real?" — usa pergunta genérica segura
+    const fallbacks = [
+      { question: 'O personagem ficou famoso depois dos anos 2000?', reaction: 'reflexivo', isGuess: false },
+      { question: 'É um personagem do entretenimento (música, cinema ou esporte)?', reaction: 'concentrado', isGuess: false },
+      { question: 'Essa pessoa ou personagem é conhecido mundialmente?', reaction: 'inquieto', isGuess: false },
+    ];
+    return fallbacks[questionNumber % fallbacks.length];
   }
 }
