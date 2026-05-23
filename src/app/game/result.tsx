@@ -7,7 +7,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '../../styles/global';
 import { resultStyles } from '../../styles/result';
-import { searchCharacterImage } from '../../services/imageSearch';
+import { searchCharacterImage, hintsFromHistory } from '../../services/imageSearch';
 import { saveResult, revealCharacter, loadHistory, HistoryEntry } from '../../services/history';
 import { publishResult } from '../../services/social';
 import { saveGameKnowledge } from '../../services/aiKnowledge';
@@ -70,7 +70,7 @@ export default function Result() {
       setHistory(h);
       // pega o id real (primeiro da lista, que acabou de ser salvo)
       if (h.length > 0) setEntryId(h[0].id);
-      const uri = await searchCharacterImage(character);
+      const uri = await searchCharacterImage(character, hintsFromHistory(parsedHistory));
       setImageUri(uri);
       setLoading(false);
     }
@@ -103,7 +103,7 @@ export default function Result() {
     setHistory(h => h.map(e => e.id === entryId ? { ...e, revealedCharacter: revealed.trim() } : e));
     // Busca a foto do personagem real agora que sabemos quem é
     setLoading(true);
-    const uri = await searchCharacterImage(revealed.trim());
+    const uri = await searchCharacterImage(revealed.trim(), hintsFromHistory(parsedHistory));
     setImageUri(uri);
     setLoading(false);
   }

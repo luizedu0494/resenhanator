@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Image, ActivityIndicator } from 'react-native';
+import {
+  View, Text, Image, ActivityIndicator,
+  TouchableOpacity,
+} from 'react-native';
 import { router } from 'expo-router';
 import { globalStyles, colors } from '../../styles/global';
-import { gameStyles } from '../../styles/game';
+import { gameStyles, guessStyles } from '../../styles/game';
 import { getNextQuestion, GameState, isValidYesNoQuestion } from '../../services/groq';
 import { GameButton } from '../../components/GameButton';
 import { FeedbackButton } from '../../components/FeedbackButton';
@@ -97,24 +100,20 @@ async function forceGuessFromAPI(history: { question: string; answer: string }[]
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         temperature: 0.2,
-        max_tokens: 30,
+        max_tokens: 80,
         messages: [
           {
             role: 'system',
             content:
-              'Você é um especialista em adivinhar personagens. ' +
-              'Dado um conjunto de características, você diz o nome do personagem mais provável. ' +
-              'REGRAS ABSOLUTAS:\n' +
-              '1. Responda SOMENTE com o nome do personagem. Nada mais.\n' +
-              '2. Sem frases, sem explicações, sem pontuação extra.\n' +
-              '3. Se não tiver certeza, chute o mais provável mesmo assim.\n' +
-              'Exemplos de resposta correta: "Neymar" | "Goku" | "Anitta" | "Homem-Aranha"',
+              'Você adivinha personagens famosos com base em características.\n' +
+              'Responda SOMENTE com o nome completo do personagem. Zero explicações.\n' +
+              'Exemplos: "Luciano Huck" | "Goku" | "Anitta" | "Silvio Santos"',
           },
           {
             role: 'user',
             content:
-              `Características do personagem:\n${factsText}\n\n` +
-              'Qual personagem é esse? Responda só com o nome.',
+              `Características:\n${factsText}\n\n` +
+              'Nome do personagem:',
           },
         ],
       }),
@@ -295,19 +294,52 @@ export default function Game() {
       )}
 
       <View style={gameStyles.buttonsContainer}>
-        {buttonRows.map((row, rowIdx) => (
-          <View key={rowIdx} style={gameStyles.buttonRow}>
-            {row.map((btn) => (
-              <GameButton
-                key={btn.label}
-                label={btn.label}
-                type={btn.type}
-                onPress={() => handleAnswer(btn.label)}
+        {isGuess ? (
+          /* ── Modo chute: só Sim e Não, maiores e dramáticos ── */
+          <View style={guessStyles.container}>
+            <Text style={guessStyles.hint}>É esse?</Text>
+            <View style={guessStyles.row}>
+              <TouchableOpacity
+                style={[guessStyles.btn, guessStyles.btnSim]}
+                onPress={() => handleAnswer('Sim')}
                 disabled={loading}
-              />
-            ))}
+                activeOpacity={0.75}
+              >
+                <Text style={guessStyles.btnSymbol}>✓</Text>
+                <Text style={guessStyles.btnLabel}>SIM!</Text>
+                <Text style={guessStyles.btnSub}>Acertou!</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[guessStyles.btn, guessStyles.btnNao]}
+                onPress={() => handleAnswer('Não')}
+                disabled={loading}
+                activeOpacity={0.75}
+              >
+                <Text style={guessStyles.btnSymbol}>✕</Text>
+                <Text style={guessStyles.btnLabel}>NÃO</Text>
+                <Text style={guessStyles.btnSub}>Errou...</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        ))}
+        ) : (
+          /* ── Modo pergunta: todos os botões normais ── */
+          <>
+            {buttonRows.map((row, rowIdx) => (
+              <View key={rowIdx} style={gameStyles.buttonRow}>
+                {row.map((btn) => (
+                  <GameButton
+                    key={btn.label}
+                    label={btn.label}
+                    type={btn.type}
+                    onPress={() => handleAnswer(btn.label)}
+                    disabled={loading}
+                  />
+                ))}
+              </View>
+            ))}
+          </>
+        )}
       </View>
 
     </View>
