@@ -163,7 +163,7 @@ Caminho: qual mitologia? → deus ou herói? → qual? → CHUTE.`;
     } else {
       // Universo ainda desconhecido — descobre um por vez
       const universosNaoPerguntos = [
-        { kw: 'anime',               q: 'É de um anime?' },
+        { kw: 'anime',             q: 'É de um anime?' },
         { kw: 'cartoon',             q: 'É um cartoon ou animação ocidental (não anime)?' },
         { kw: 'videogame',           q: 'É de um videogame?' },
         { kw: 'marvel',              q: 'É da Marvel?' },
@@ -217,13 +217,13 @@ Após identificar a área, aprofunde com subperguntas específicas e CHUTE.`
 
   const feedbackCtx = recentFeedback.length > 0
     ? `\n\n⚠️ ERROS RECENTES (perguntas que o jogador marcou como inválidas):\n`
-      + recentFeedback.map(f => `- "${f.question}"`).join('\n')
+    + recentFeedback.map(f => `- "${f.question}"`).join('\n')
     : '';
 
   const effectiveQCtx = topQuestions.length > 0
     ? `\n\nPERGUNTAS MAIS EFICAZES (use se ainda não fez):\n`
-      + topQuestions.filter(q => !askedSet.has(normQ(q.question))).slice(0, 5)
-          .map(q => `- "${q.question}" (${q.successRate}% acerto)`).join('\n')
+    + topQuestions.filter(q => !askedSet.has(normQ(q.question))).slice(0, 5)
+        .map(q => `- "${q.question}" (${q.successRate}% acerto)`).join('\n')
     : '';
 
   const urgency =
@@ -318,21 +318,55 @@ Chute:    {"question":"É [nome]?","reaction":"confiante","isGuess":true,"charac
     { question: 'Tem mais de 10 milhões de seguidores nas redes sociais?', reaction: 'concentrado', isGuess: false },
   ];
 
-  const fallbacksFicticio = [
-    { question: 'É de um anime?',                  reaction: 'concentrado', isGuess: false },
-    { question: 'É um cartoon ou animação ocidental?', reaction: 'reflexivo', isGuess: false },
-    { question: 'É da Marvel?',                   reaction: 'inquieto',    isGuess: false },
-    { question: 'É da DC Comics?',                reaction: 'concentrado', isGuess: false },
-    { question: 'É de um videogame?',             reaction: 'reflexivo',   isGuess: false },
-    { question: 'É da Disney ou Pixar?',          reaction: 'inquieto',    isGuess: false },
-    { question: 'É o protagonista da história?',  reaction: 'concentrado', isGuess: false },
-    { question: 'Tem superpoderes ou habilidades especiais?', reaction: 'reflexivo', isGuess: false },
-    { question: 'É um vilão?',                    reaction: 'inquieto',    isGuess: false },
-    { question: 'É de um livro ou romance?',      reaction: 'concentrado', isGuess: false },
+  // Fallbacks específicos para cada mídia confirmada
+  const fallbacksCartoon = [
+    { question: 'É da Nickelodeon?',                                    reaction: 'concentrado', isGuess: false },
+    { question: 'É do Cartoon Network?',                                reaction: 'reflexivo',   isGuess: false },
+    { question: 'É da Hanna-Barbera (Scooby-Doo, Flintstones)?',       reaction: 'inquieto',    isGuess: false },
+    { question: 'É do Fox (Simpsons, Futurama, Family Guy)?',           reaction: 'concentrado', isGuess: false },
+    { question: 'É do Adult Swim (Rick and Morty, Aqua Teen)?',         reaction: 'reflexivo',   isGuess: false },
+    { question: 'É da Netflix (Big Mouth, Bojack Horseman)?',           reaction: 'inquieto',    isGuess: false },
+    { question: 'É o protagonista da série?',                           reaction: 'concentrado', isGuess: false },
+    { question: 'Tem superpoderes ou habilidades especiais?',           reaction: 'reflexivo',   isGuess: false },
+    { question: 'É um animal ou criatura não-humana?',                  reaction: 'inquieto',    isGuess: false },
+    { question: 'A série tem mais de 100 episódios?',                   reaction: 'concentrado', isGuess: false },
+    { question: 'É um cartoon brasileiro?',                             reaction: 'reflexivo',   isGuess: false },
+    { question: 'É dos anos 90 ou anterior?',                           reaction: 'inquieto',    isGuess: false },
   ];
 
+  const fallbacksAnime = [
+    { question: 'É do Dragon Ball?',                       reaction: 'concentrado', isGuess: false },
+    { question: 'É do Naruto?',                            reaction: 'reflexivo',   isGuess: false },
+    { question: 'É do One Piece?',                         reaction: 'inquieto',    isGuess: false },
+    { question: 'É do Attack on Titan?',                   reaction: 'concentrado', isGuess: false },
+    { question: 'É do Demon Slayer?',                      reaction: 'reflexivo',   isGuess: false },
+    { question: 'É do My Hero Academia?',                  reaction: 'inquieto',    isGuess: false },
+    { question: 'É o protagonista?',                       reaction: 'concentrado', isGuess: false },
+    { question: 'Tem superpoderes?',                       reaction: 'reflexivo',   isGuess: false },
+    { question: 'É um vilão?',                             reaction: 'inquieto',    isGuess: false },
+    { question: 'É do Hunter x Hunter?',                   reaction: 'concentrado', isGuess: false },
+  ];
+
+  const fallbacksFicticio = [
+    { question: 'É de um anime?',                                       reaction: 'concentrado', isGuess: false },
+    { question: 'É um cartoon ou animação ocidental (não anime)?',      reaction: 'reflexivo',   isGuess: false },
+    { question: 'É da Marvel?',                                         reaction: 'inquieto',    isGuess: false },
+    { question: 'É da DC Comics?',                                      reaction: 'concentrado', isGuess: false },
+    { question: 'É de um videogame?',                                   reaction: 'reflexivo',   isGuess: false },
+    { question: 'É da Disney ou Pixar?',                                reaction: 'inquieto',    isGuess: false },
+    { question: 'É o protagonista da história?',                        reaction: 'concentrado', isGuess: false },
+    { question: 'Tem superpoderes ou habilidades especiais?',           reaction: 'reflexivo',   isGuess: false },
+    { question: 'É um vilão?',                                          reaction: 'inquieto',    isGuess: false },
+    { question: 'É de um livro ou romance?',                            reaction: 'concentrado', isGuess: false },
+  ];
+
+  // Escolhe o banco de fallbacks mais específico possível com trava de segurança correta
   const fallbacks = category === 'real'
     ? fallbacksReal
+    : (isCartoon && !isAnime && !isManga && !isGame && !isMarvel && !isDC && !isDisney)
+    ? fallbacksCartoon
+    : (isAnime || isManga || isManhua)
+    ? fallbacksAnime
     : category === 'ficticio'
     ? fallbacksFicticio
     : [...fallbacksReal, ...fallbacksFicticio];

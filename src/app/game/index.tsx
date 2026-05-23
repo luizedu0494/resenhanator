@@ -54,7 +54,7 @@ function log(tag: string, payload?: unknown) {
 function printGameSummary(history: { question: string; answer: string }[], finalCharacter: string, won: boolean) {
   console.log('\n');
   console.log('╔══════════════════════════════════════════════════════╗');
-  console.log('║              RESUMO DA PARTIDA                       ║');
+  console.log('║               RESUMO DA PARTIDA                      ║');
   console.log('╠══════════════════════════════════════════════════════╣');
   console.log(`║  Personagem final : ${finalCharacter.padEnd(31)}║`);
   console.log(`║  Resultado        : ${(won ? '✅ IA ACERTOU' : '❌ IA ERROU').padEnd(31)}║`);
@@ -68,13 +68,32 @@ function printGameSummary(history: { question: string; answer: string }[], final
   console.log('\n');
 }
 
+// ─── Utilitário de Delay ─────────────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// ─── Fallback Inteligente (quando a API falha) ───────────────────────────────
+
+function getIntelligentFallback(facts: string): string {
+  const lowerFacts = facts.toLowerCase();
+  
+  if (lowerFacts.includes('mar') || lowerFacts.includes('água') || lowerFacts.includes('esponja')) return 'Bob Esponja';
+  if (lowerFacts.includes('alien') || lowerFacts.includes('relógio') || lowerFacts.includes('ben')) return 'Ben Tennyson';
+  if (lowerFacts.includes('medo') || lowerFacts.includes('cachorro') || lowerFacts.includes('mistério') || lowerFacts.includes('fantasma')) return 'Salsicha';
+  if (lowerFacts.includes('ninja') || lowerFacts.includes('anime') || lowerFacts.includes('naruto')) return 'Naruto';
+  if (lowerFacts.includes('sayajin') || lowerFacts.includes('esfera') || lowerFacts.includes('goku')) return 'Goku';
+  if (lowerFacts.includes('morcego') || lowerFacts.includes('gotham') || lowerFacts.includes('rico')) return 'Batman';
+  if (lowerFacts.includes('aranha') || lowerFacts.includes('teia') || lowerFacts.includes('marvel')) return 'Homem-Aranha';
+  
+  // Resposta genérica caso não ache padrão
+  return 'Mickey Mouse';
+}
+
 // ─── Função para forçar chute via API quando character === '__FORCE_GUESS__' ──
 
 async function forceGuessFromAPI(history: { question: string; answer: string }[]): Promise<string> {
   log('FORCE_GUESS', 'Limite atingido — chamando API para chute final');
 
-  // Limpa o prefixo verboso que o modelo coloca nas perguntas e monta fatos diretos
-  // Ex: "O personagem que você está pensando é brasileiro?" + "Sim" → "É brasileiro: Sim"
   const factsText = history
     .map(h => {
       const q = h.question
@@ -82,7 +101,6 @@ async function forceGuessFromAPI(history: { question: string; answer: string }[]
         .replace(/^O personagem\s*/i, '')
         .replace(/\?$/, '')
         .trim();
-      // Capitaliza primeira letra
       const qClean = q.charAt(0).toUpperCase() + q.slice(1);
       return `- ${qClean}: ${h.answer}`;
     })
@@ -90,56 +108,82 @@ async function forceGuessFromAPI(history: { question: string; answer: string }[]
 
   log('FORCE_GUESS_FACTS', factsText);
 
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.EXPO_PUBLIC_GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.2,
-        max_tokens: 80,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'Você adivinha personagens famosos com base em características.\n' +
-              'Responda SOMENTE com o nome completo do personagem. Zero explicações.\n' +
-              'Exemplos: "Luciano Huck" | "Goku" | "Anitta" | "Silvio Santos"',
-          },
-          {
-            role: 'user',
-            content:
-              `Características:\n${factsText}\n\n` +
-              'Nome do personagem:',
-          },
-        ],
-      }),
-    });
+  // Tenta até 3 vezes com delay crescente
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      if (attempt === 2) {
+        log('FORCE_GUESS_RETRY', 'Tentativa 2 aguardando 1.5s...');
+        await sleep(1500);
+      } else if (attempt === 3) {
+        log('FORCE_GUESS_RETRY', 'Tentativa 3 aguardando 3s...');
+        await sleep(3000);
+      }
 
-    const data = await response.json();
-    const raw  = (data.choices?.[0]?.message?.content ?? '').trim();
-    log('FORCE_GUESS_RAW', { raw });
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          temperature: 0.2,
+          max_tokens: 80,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Você adivinha personagens fictícios, desenhos animados ou famosos com base em características.\n' +
+                'Considere personagens com superpoderes (ex: Goku, Ben Tennyson, Superman) e sem superpoderes (ex: Salsicha, Bob Esponja, Chaves).\n' +
+                'Você deve retornar OBRIGATORIAMENTE um objeto JSON válido no formato: {"nome": "Nome do Personagem"}.\n' +
+                'Não adicione nenhuma explicação, raciocínio ou texto fora do JSON.',
+            },
+            {
+              role: 'user',
+              content:
+                `Características:\n${factsText}\n\n` +
+                'Retorne o JSON com o nome do personagem:',
+            },
+          ],
+        }),
+      });
 
-    // O modelo às vezes escreve raciocínio antes do nome ("Hebe não serve... então: Chico Xavier")
-    // Estratégia: pega a última linha não vazia, que tende a ser o nome final
-    const lines = raw.split('\n').map((l: string) => l.trim()).filter(Boolean);
-    const lastLine = lines[lines.length - 1] ?? '';
+      if (!response.ok) {
+        throw new Error(`HTTP Error status: ${response.status}`);
+      }
 
-    const name = lastLine
-      .replace(/^(Resposta|Nome|Personagem|então|portanto|logo|chuto|chute)[^a-zA-ZÀ-ú]*/i, '')
-      .replace(/^["'`]|["'`]$/g, '')
-      .replace(/\.$/g, '')
-      .trim();
+      const data = await response.json();
+      const raw  = (data.choices?.[0]?.message?.content ?? '').trim();
+      
+      if (!raw) {
+        log('FORCE_GUESS_EMPTY', `Tentativa ${attempt} retornou string vazia.`);
+        continue; // Pula para a próxima tentativa se vier vazio
+      }
 
-    log('FORCE_GUESS_RESULT', { name });
-    return name || 'Não sei';
-  } catch (err) {
-    log('FORCE_GUESS_ERROR', String(err));
-    return 'Não sei';
+      log(`FORCE_GUESS_RAW_ATTEMPT_${attempt}`, { raw });
+
+      const parsedData = JSON.parse(raw);
+      
+      if (parsedData.nome) {
+        log('FORCE_GUESS_RESULT', { name: parsedData.nome });
+        return parsedData.nome;
+      } else {
+        throw new Error("JSON retornado não contém a chave 'nome'");
+      }
+
+    } catch (err) {
+      log(`FORCE_GUESS_ERROR_ATTEMPT_${attempt}`, String(err));
+      // Se for a última tentativa, o loop vai encerrar e cair no fallback inteligente
+    }
   }
+
+  // Se esgotou as 3 tentativas e não retornou nada, usa o fallback baseado no histórico
+  log('FORCE_GUESS_FAILED', 'Todas as tentativas falharam. Usando Fallback Inteligente.');
+  const fallbackName = getIntelligentFallback(factsText);
+  log('FORCE_GUESS_FALLBACK', { name: fallbackName });
+  
+  return fallbackName;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -154,7 +198,6 @@ export default function Game() {
   const [character, setCharacter]     = useState('');
   const [feedback, setFeedback]       = useState<string | undefined>(undefined);
 
-  // Ref para ter sempre o gameState atualizado dentro de closures assíncronas
   const gameStateRef = useRef<GameState>({ history: [] });
 
   useEffect(() => {
