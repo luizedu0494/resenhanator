@@ -30,6 +30,7 @@ export interface AiMemoryEntry {
   wasGuessed: boolean;     // IA acertou?
   category?: string;       // 'real' | 'ficticio' — preenchido pelo jogo futuramente
   date: string;
+  count?: number;          // Quantas vezes esse personagem já foi jogado (Popularidade)
 }
 
 // ─── Histórico do jogador ────────────────────────────────────────────────────
@@ -78,15 +79,33 @@ export async function clearHistory(): Promise<void> {
   await AsyncStorage.removeItem(historyKey());
 }
 
-// ─── Memória exclusiva da IA ─────────────────────────────────────────────────
+// ─── Memória exclusiva da IA (Aprendizado) ───────────────────────────────────
 
 async function appendAiMemory(entry: AiMemoryEntry): Promise<void> {
   const current = await loadAiMemory();
-  // Evita duplicatas pelo nome (case-insensitive)
-  const exists = current.some(
+  
+  // Procura se o personagem já existe na memória da IA
+  const existingIndex = current.findIndex(
     e => e.character.toLowerCase() === entry.character.toLowerCase()
   );
-  if (exists) return;
+
+  if (existingIndex >= 0) {
+    // Personagem já existe: Atualiza popularidade e dados
+    const existingEntry = current[existingIndex];
+    existingEntry.count = (existingEntry.count || 1) + 1;
+    existingEntry.date = entry.date;
+    existingEntry.wasGuessed = entry.wasGuessed;
+
+    // Move para o topo da lista (mais recente)
+    current.splice(existingIndex, 1);
+    current.unshift(existingEntry);
+    
+    await AsyncStorage.setItem(aiMemoryKey(), JSON.stringify(current));
+    return;
+  }
+
+  // Novo personagem: Adiciona com contador inicial de 1
+  entry.count = 1;
   const updated = [entry, ...current].slice(0, MAX_MEMORY);
   await AsyncStorage.setItem(aiMemoryKey(), JSON.stringify(updated));
 }

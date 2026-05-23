@@ -15,6 +15,12 @@ function normQ(q: string) {
   return q.toLowerCase().trim().replace(/\?+$/, '').trim();
 }
 
+// Utilitário para sortear um item de um array
+function getRandomItem<T>(arr: T[]): T | null {
+  if (arr.length === 0) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 export function inferCategory(
   history: { question: string; answer: string }[]
 ): 'real' | 'ficticio' | null {
@@ -49,12 +55,10 @@ export async function getNextQuestion(gameState: GameState): Promise<{
   const questionNumber = gameState.history.length + 1;
   const askedSet = new Set(gameState.history.map(h => normQ(h.question)));
 
-  // Pergunta 1 — sempre fixa
   if (questionNumber === 1) {
     return { question: 'É uma pessoa real?', reaction: 'neutro', isGuess: false };
   }
 
-  // Hard limit
   if (questionNumber > 20) {
     return {
       question: 'Já tenho pistas suficientes. Vou arriscar meu melhor chute!',
@@ -68,17 +72,24 @@ export async function getNextQuestion(gameState: GameState): Promise<{
     getRecentInvalidQuestionFeedback(10),
   ]);
 
-  const neverRepeat = memory.map(m => m.character);
-  const playerLikes = memory.filter(m => !m.wasGuessed).map(m => m.character);
-  const aiGuessed   = memory.filter(m => m.wasGuessed).map(m => m.character);
-  const category    = inferCategory(gameState.history);
+  // ─── NOVO: Lógica de Personagens Frequentes (Aprendizado) ───
+  // Pega os 10 personagens com maior "count" (mais jogados)
+  const frequentCharacters = memory
+    .sort((a: any, b: any) => (b.count || 1) - (a.count || 1))
+    .slice(0, 10)
+    .map(m => m.character);
 
-  const confirmedYes = (kw: string) => gameState.history.some(h =>
-    h.question.toLowerCase().includes(kw) && (h.answer === 'Sim' || h.answer === 'Prov. sim'));
+  const category = inferCategory(gameState.history);
+
+  const confirmedYes = (kw: string) => gameState.history.some(h => {
+    const q = h.question.toLowerCase();
+    if (kw === 'anime' && (q.includes('não anime') || q.includes('não é anime'))) return false;
+    return q.includes(kw) && (h.answer === 'Sim' || h.answer === 'Prov. sim');
+  });
+
   const alreadyAsked = (kw: string) => gameState.history.some(h =>
     h.question.toLowerCase().includes(kw));
 
-  // Detecta mídia/universo confirmado
   const isAnime    = confirmedYes('anime');
   const isManga    = confirmedYes('mangá') || confirmedYes('manga');
   const isManhua   = confirmedYes('manhwa') || confirmedYes('manhua') || confirmedYes('webtoon');
@@ -94,285 +105,192 @@ export async function getNextQuestion(gameState: GameState): Promise<{
   const isTeatro   = confirmedYes('teatro') || confirmedYes('musical');
   const isMito     = confirmedYes('mitologia') || confirmedYes('lendário') || confirmedYes('folclore');
 
-  // Monta contexto do caminho fictício com base na mídia confirmada
   let ficticioPath = '';
   if (category === 'ficticio') {
     if (isAnime || isManga) {
       ficticioPath = `
 🎌 CONFIRMADO: Anime/Mangá.
-Caminho: qual série? (Dragon Ball? Naruto? One Piece? AoT? Demon Slayer? MHA? HxH? Bleach? FMA? Cowboy Bebop?) → protagonista? → poderes? → CHUTE.
-⚠️ Anime NÃO é série de TV. NUNCA pergunte "É de série?" para anime.`;
-    } else if (isManhua) {
-      ficticioPath = `
-📱 CONFIRMADO: Manhwa/Manhua/Webtoon (coreano ou chinês).
-Caminho: qual obra? (Solo Leveling? Tower of God? Noblesse? Omniscient Reader?) → protagonista? → CHUTE.`;
+Caminho: qual série? → protagonista? → CARACTERÍSTICAS (cor do cabelo? usa espada? tem cicatriz? usa magia? usa uniforme?) → CHUTE.`;
     } else if (isCartoon) {
       ficticioPath = `
-📺 CONFIRMADO: Cartoon/Animação Ocidental (NÃO anime).
-Inclui: Hanna-Barbera (Scooby-Doo, Flintstones, Jetsons), Looney Tunes, Disney clássico, Pixar, DreamWorks, Nickelodeon (Bob Esponja, Rugrats), Cartoon Network (Ben 10, Samurai Jack, As Meninas Superpoderosas), Fox (Simpsons, Futurama, Family Guy), Adult Swim (Rick and Morty, Bojack), Netflix (Big Mouth).
-Caminho: estúdio/emissora? → protagonista da série? → características físicas marcantes? → CHUTE.
-⚠️ Cartoon NÃO é anime. São mídias completamente diferentes.`;
+📺 CONFIRMADO: Cartoon/Animação Ocidental.
+Caminho: estúdio/emissora? → CARACTERÍSTICAS (é um animal? é verde/amarelo? usa chapéu? é criança? vive debaixo d'água? é super-herói?) → CHUTE.`;
     } else if (isGame) {
       ficticioPath = `
 🎮 CONFIRMADO: Videogame.
-Caminho: plataforma? (Nintendo/PlayStation/Xbox/PC/Mobile) → qual franquia? → protagonista? → CHUTE.
-⚠️ Videogame NÃO é série de TV.`;
-    } else if (isDisney) {
+Caminho: franquia? → CARACTERÍSTICAS (usa armadura? arma de fogo? tem bigode? é um animal? salva princesa?) → CHUTE.`;
+    } else if (isMarvel || isDC) {
       ficticioPath = `
-🏰 CONFIRMADO: Disney/Pixar.
-Inclui: princesas, vilões, animais falantes, personagens de filmes animados.
-Caminho: qual filme? → protagonista? → características? → CHUTE.`;
-    } else if (isMarvel) {
-      ficticioPath = `
-🦸 CONFIRMADO: Marvel.
-Caminho: herói ou vilão? → tem superpoderes? → Vingadores/X-Men/Guardiões? → CHUTE.`;
-    } else if (isDC) {
-      ficticioPath = `
-🦇 CONFIRMADO: DC Comics.
-Caminho: herói ou vilão? → Gotham/Metrópolis? → qual série/filme? → CHUTE.`;
-    } else if (isHQ) {
-      ficticioPath = `
-📚 CONFIRMADO: HQ/Quadrinho (não Marvel nem DC).
-Inclui: Image Comics (Spawn), Dark Horse (Hellboy), Bonelli (Tex, Zagor, Dylan Dog), Vertigo, Turma da Mônica.
-Caminho: qual editora? → brasileiro ou estrangeiro? → protagonista? → CHUTE.`;
-    } else if (isSerie) {
-      ficticioPath = `
-📺 CONFIRMADO: Série de TV (live-action).
-Inclui: drama, comédia, thriller, sci-fi — brasileira ou internacional.
-Caminho: drama ou comédia? → americana/brasileira/coreana/britânica? → qual série? → protagonista? → CHUTE.
-⚠️ NÃO inclui anime nem cartoon.`;
-    } else if (isFilme) {
-      ficticioPath = `
-🎬 CONFIRMADO: Filme (não animado).
-Caminho: gênero? → americano ou outro? → qual franquia? → protagonista? → CHUTE.`;
-    } else if (isLivro) {
-      ficticioPath = `
-📖 CONFIRMADO: Livro/Literatura.
-Inclui: romances, fantasia (Harry Potter, Senhor dos Anéis, Game of Thrones livro), ficção científica, literatura brasileira, clássicos, mangá literário.
-Caminho: gênero literário? → brasileiro ou estrangeiro? → qual obra? → protagonista? → CHUTE.`;
-    } else if (isTeatro) {
-      ficticioPath = `
-🎭 CONFIRMADO: Teatro/Musical.
-Inclui: personagens de Shakespeare, musicais da Broadway (Hamilton, Wicked, Phantom), ópera.
-Caminho: clássico ou moderno? → qual obra? → protagonista? → CHUTE.`;
-    } else if (isMito) {
-      ficticioPath = `
-⚡ CONFIRMADO: Mitologia/Folclore/Lenda.
-Inclui: mitologia grega/romana/nórdica/egípcia/japonesa, folclore brasileiro (Saci, Curupira), lendas medievais (Rei Artur).
-Caminho: qual mitologia? → deus ou herói? → qual? → CHUTE.`;
+🦸 CONFIRMADO: Heróis (Marvel/DC).
+Caminho: herói ou vilão? → CARACTERÍSTICAS (voa? usa capa? armadura de metal? mutante/alienígena? cor do traje principal?) → CHUTE.`;
     } else {
-      // Universo ainda desconhecido — descobre um por vez
-      const universosNaoPerguntos = [
+      const universosDisponiveis = [
         { kw: 'anime',             q: 'É de um anime?' },
-        { kw: 'cartoon',             q: 'É um cartoon ou animação ocidental (não anime)?' },
-        { kw: 'videogame',           q: 'É de um videogame?' },
-        { kw: 'marvel',              q: 'É da Marvel?' },
-        { kw: 'dc comics',           q: 'É da DC Comics?' },
-        { kw: 'disney',              q: 'É da Disney ou Pixar?' },
-        { kw: 'série de tv',         q: 'É de uma série de TV (live-action)?' },
-        { kw: 'filme',               q: 'É de um filme (não animado)?' },
-        { kw: 'livro',               q: 'É originalmente de um livro ou romance?' },
-        { kw: 'quadrinho',           q: 'É de um quadrinho ou HQ?' },
-        { kw: 'manhwa',              q: 'É de um manhwa, manhua ou webtoon?' },
-        { kw: 'mitologia',           q: 'É um personagem de mitologia ou folclore?' },
-        { kw: 'teatro',              q: 'É de uma peça de teatro ou musical?' },
-      ].find(u => !alreadyAsked(u.kw));
+        { kw: 'cartoon',           q: 'É um cartoon ou animação ocidental?' },
+        { kw: 'videogame',         q: 'É de um videogame?' },
+        { kw: 'marvel',            q: 'É da Marvel?' },
+        { kw: 'dc comics',         q: 'É da DC Comics?' },
+        { kw: 'disney',            q: 'É da Disney ou Pixar?' },
+        { kw: 'série de tv',       q: 'É de uma série de TV (live-action)?' },
+        { kw: 'filme',             q: 'É de um filme (não animado)?' },
+      ].filter(u => !alreadyAsked(u.kw));
 
-      ficticioPath = universosNaoPerguntos
-        ? `\n🗺️ Universo ainda desconhecido. Próxima sugerida: "${universosNaoPerguntos.q}"\n\nMÍDIAS SÃO EXCLUSIVAS:\n• Anime = japonês animado\n• Cartoon = animação ocidental\n• Série TV = live-action\n• Videogame = jogo interativo`
-        : '\n🗺️ Universo já explorado. Aprofunde traços e CHUTE.';
+      const universoSorteado = getRandomItem(universosDisponiveis);
+
+      ficticioPath = universoSorteado
+        ? `\n🗺️ Universo ainda desconhecido. Próxima sugerida: "${universoSorteado.q}"`
+        : '\n🗺️ Universo já explorado. Aprofunde CARACTERÍSTICAS FÍSICAS e CHUTE.';
     }
   }
 
-  // Contexto de categoria
   const categoryCtx = category === 'real'
-    ? `\n✅ PESSOA REAL.
-CAMINHO OBRIGATÓRIO:
-→ Gênero (masculino/feminino?)
-→ Nacionalidade (brasileiro? americano? europeu? asiático?)
-→ Ainda vivo?
-→ Quando ficou famoso? (antes/depois de 2000?)
-→ Área principal — escolha UMA e aprofunde:
-
-🏆 ESPORTES: futebol / basquete / MMA/UFC / tênis / vôlei / natação / F1 / boxe / atletismo
-🎵 MÚSICA: funk / sertanejo / pagode / axé / MPB / rock / pop / rap/trap / eletrônico / k-pop / jazz / clássico / gospel
-🎭 ENTRETENIMENTO: ator de novela / ator de cinema / apresentador de TV / comediante / influencer / youtuber / streamer / tiktoker
-🏛️ POLÍTICA: presidente / governador / senador / prefeito / ministro / ativista
-💡 CIÊNCIA/ARTE: cientista / inventor / escritor / artista plástico / filósofo / médico famoso / chef de cozinha / astronauta
-💼 NEGÓCIOS: empresário / CEO / bilionário
-👑 REALEZA/HISTÓRIA: rei / rainha / figura histórica
-
-Após identificar a área, aprofunde com subperguntas específicas e CHUTE.`
+    ? `\n✅ PESSOA REAL. Aprofunde com características físicas marcantes (barba, careca, óculos, tatuagem, cabelo loiro) e área de atuação.`
     : category === 'ficticio'
     ? `\n✅ FICTÍCIO.${ficticioPath}`
     : '\n⚠️ Ainda não confirmou real ou fictício.';
 
   const askedCtx = gameState.history.length > 0
-    ? `\n\n🚫 JÁ PERGUNTADO — NUNCA REPITA:\n${gameState.history.map((h, i) => `${i + 1}. "${h.question}" → ${h.answer}`).join('\n')}`
+    ? `\n\n🚫 JÁ PERGUNTADO:\n${gameState.history.map((h, i) => `${i + 1}. "${h.question}" → ${h.answer}`).join('\n')}`
     : '';
 
-  const neverRepeatCtx   = neverRepeat.length > 0 ? `\nNUNCA CHUTE: ${neverRepeat.join(', ')}.` : '';
-  const playerProfileCtx = playerLikes.length  > 0 ? `\nPERFIL DO JOGADOR: ${playerLikes.join(', ')}.` : '';
-  const aiStrengthCtx    = aiGuessed.length    > 0 ? `\nIA já acertou: ${aiGuessed.slice(0, 10).join(', ')}.` : '';
+  const frequentCtx = frequentCharacters.length > 0 
+    ? `\n🧠 PERSONAGENS POPULARES (Considere chutar esses se os traços baterem): ${frequentCharacters.join(', ')}.` 
+    : '';
 
   const feedbackCtx = recentFeedback.length > 0
-    ? `\n\n⚠️ ERROS RECENTES (perguntas que o jogador marcou como inválidas):\n`
-    + recentFeedback.map(f => `- "${f.question}"`).join('\n')
+    ? `\n\n⚠️ ERROS RECENTES (Evite estas perguntas inválidas):\n` + recentFeedback.map(f => `- "${f.question}"`).join('\n')
     : '';
 
-  const effectiveQCtx = topQuestions.length > 0
-    ? `\n\nPERGUNTAS MAIS EFICAZES (use se ainda não fez):\n`
-    + topQuestions.filter(q => !askedSet.has(normQ(q.question))).slice(0, 5)
-        .map(q => `- "${q.question}" (${q.successRate}% acerto)`).join('\n')
-    : '';
+  const historyText = gameState.history.map((h, i) => `${i + 1}. P: "${h.question}" → R: ${h.answer}`).join('\n');
 
-  const urgency =
-    questionNumber > 18 ? '🚨 CHUTE OBRIGATÓRIO agora!' :
-    questionNumber > 15 ? '⚠️ Hora de chutar. Máx 1 pergunta ainda.' :
-    questionNumber > 10 ? 'Prepare o chute — aprofunde só o essencial.' :
-                          'Mapeie e aprofunde seguindo o caminho da categoria.';
-
-  const historyText = gameState.history
-    .map((h, i) => `${i + 1}. P: "${h.question}" → R: ${h.answer}`)
-    .join('\n');
-
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.EXPO_PUBLIC_GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.5,
-      max_tokens: 250,
-      messages: [
-        {
-          role: 'system',
-          content:
-`Você é o Resenhanator, um gênio arrogante e divertido que tenta adivinhar personagens. Pergunta ${questionNumber}/20.
-${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${aiStrengthCtx}${askedCtx}${effectiveQCtx}${feedbackCtx}
-
-━━━ REGRA DE OURO ━━━
-Toda pergunta DEVE ser respondível com SIM ou NÃO.
-✓ "É brasileiro?" / "É da Marvel?" / "Tem superpoderes?"
-✗ "É de qual país?" / "É de filme ou série?" / "Qual área?"
-
-━━━ DEDUÇÃO IMEDIATA ━━━
-Se as respostas já identificam UM ÚNICO personagem: CHUTE IMEDIATAMENTE.
-Ex: fictício + anime + Dragon Ball + protagonista = Goku → CHUTE JÁ
-Ex: fictício + cartoon ocidental + Hanna-Barbera + cachorro + dono medroso = Scooby-Doo → CHUTE JÁ
-Ex: real + Brasil + futebol + aposentado + maior de todos os tempos = Pelé → CHUTE JÁ
-
-━━━ LIMITE ━━━
-${urgency}
-Máximo 2 perguntas por subárea, depois chuta.
-
-━━━ SAÍDA ━━━
-APENAS JSON válido, sem markdown:
-Pergunta: {"question":"...","reaction":"neutro|concentrado|confiante|desesperado|despeitado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
-Chute:    {"question":"É [nome]?","reaction":"confiante","isGuess":true,"character":"[nome]"}`,
-        },
-        {
-          role: 'user',
-          content: `Histórico (${questionNumber - 1} perguntas):\n${historyText}\n\nFaça a pergunta ${questionNumber}. NÃO repita nenhuma do histórico. Pergunta deve ser Sim/Não.`,
-        },
-      ],
-    }),
-  });
-
-  const data = await response.json();
-  const raw  = data.choices?.[0]?.message?.content || '';
-
-  let parsed: any = null;
   try {
-    const clean = raw.replace(/```json|```/g, '').trim();
-    parsed = JSON.parse(clean);
-  } catch {}
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.EXPO_PUBLIC_GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.7,
+        max_tokens: 250,
+        messages: [
+          {
+            role: 'system',
+            content:
+  `Você é o Resenhanator. Pergunta ${questionNumber}/20.
+  ${categoryCtx}${frequentCtx}${askedCtx}${feedbackCtx}
+  
+  ━━━ REGRA DE OURO ━━━
+  Toda pergunta DEVE ser SIM ou NÃO.
+  DÊ PRIORIDADE MÁXIMA a perguntas sobre CARACTERÍSTICAS VISUAIS (cor, roupa, acessórios, espécie) a partir da pergunta 5.
+  
+  ━━━ SAÍDA ━━━
+  APENAS JSON válido, sem markdown:
+  {"question":"...","reaction":"neutro|concentrado|confiante|inquieto|reflexivo","isGuess":false}`
+          },
+          { role: 'user', content: `Histórico:\n${historyText}\n\nFaça a pergunta ${questionNumber}.` },
+        ],
+      }),
+    });
 
-  if (parsed) {
-    const isDuplicate  = askedSet.has(normQ(parsed.question ?? ''));
-    const isValidQ     = isValidYesNoQuestion(parsed.question ?? '');
+    const data = await response.json();
+    const raw  = data.choices?.[0]?.message?.content || '';
+    
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch {}
 
-    if (!isDuplicate && isValidQ) return parsed;
-
-    if (!isValidQ) {
-      return { question: parsed.question, reaction: 'irritado', isGuess: false, feedback: 'invalid_question' };
+    if (parsed && isValidYesNoQuestion(parsed.question) && !askedSet.has(normQ(parsed.question))) {
+      return parsed;
     }
-    if (questionNumber > 10) {
-      return { question: 'Meu instinto já sabe. Vou arriscar!', reaction: 'confiante', isGuess: true, character: '__FORCE_GUESS__' };
-    }
+  } catch (err) {
+    // Se a API falhar, cai pros fallbacks
   }
 
-  // Fallbacks por categoria
+  // ─── LÓGICA DE EXCLUSÃO MÚTUA PARA FALLBACKS ───
+  const hasCartoonStudio = confirmedYes('nickelodeon') || confirmedYes('cartoon network') || confirmedYes('hanna-barbera') || confirmedYes('fox');
+  const hasAnimeSeries = confirmedYes('dragon ball') || confirmedYes('naruto') || confirmedYes('one piece') || confirmedYes('demon slayer');
+
   const fallbacksReal = [
-    { question: 'É do sexo masculino?',            reaction: 'concentrado', isGuess: false },
-    { question: 'É brasileiro?',                   reaction: 'reflexivo',   isGuess: false },
-    { question: 'Ainda está vivo?',                reaction: 'inquieto',    isGuess: false },
-    { question: 'É atleta profissional?',          reaction: 'concentrado', isGuess: false },
-    { question: 'É músico ou cantor?',             reaction: 'reflexivo',   isGuess: false },
-    { question: 'É ator ou atriz?',                reaction: 'inquieto',    isGuess: false },
-    { question: 'É apresentador de TV?',           reaction: 'concentrado', isGuess: false },
-    { question: 'É político?',                     reaction: 'reflexivo',   isGuess: false },
-    { question: 'Ficou famoso após os anos 2000?', reaction: 'inquieto',    isGuess: false },
-    { question: 'Tem mais de 10 milhões de seguidores nas redes sociais?', reaction: 'concentrado', isGuess: false },
+    { question: 'A pessoa é careca?', reaction: 'concentrado', isGuess: false },
+    { question: 'Usa óculos com frequência?', reaction: 'reflexivo', isGuess: false },
+    { question: 'Tem barba ou cavanhaque?', reaction: 'inquieto', isGuess: false },
+    { question: 'Tem o cabelo loiro?', reaction: 'concentrado', isGuess: false },
+    { question: 'É conhecido(a) por ter muitas tatuagens?', reaction: 'reflexivo', isGuess: false },
+    { question: 'É um homem idoso (mais de 60 anos)?', reaction: 'inquieto', isGuess: false },
+    { question: 'Costuma usar chapéu, boné ou touca?', reaction: 'concentrado', isGuess: false },
+    { question: 'Sua profissão envolve esportes com bola?', reaction: 'reflexivo', isGuess: false },
+    { question: 'Toca algum instrumento musical?', reaction: 'inquieto', isGuess: false },
+    { question: 'Apresenta programas de auditório?', reaction: 'concentrado', isGuess: false },
   ];
 
-  // Fallbacks específicos para cada mídia confirmada
-  const fallbacksCartoon = [
-    { question: 'É da Nickelodeon?',                                    reaction: 'concentrado', isGuess: false },
-    { question: 'É do Cartoon Network?',                                reaction: 'reflexivo',   isGuess: false },
-    { question: 'É da Hanna-Barbera (Scooby-Doo, Flintstones)?',       reaction: 'inquieto',    isGuess: false },
-    { question: 'É do Fox (Simpsons, Futurama, Family Guy)?',           reaction: 'concentrado', isGuess: false },
-    { question: 'É do Adult Swim (Rick and Morty, Aqua Teen)?',         reaction: 'reflexivo',   isGuess: false },
-    { question: 'É da Netflix (Big Mouth, Bojack Horseman)?',           reaction: 'inquieto',    isGuess: false },
-    { question: 'É o protagonista da série?',                           reaction: 'concentrado', isGuess: false },
-    { question: 'Tem superpoderes ou habilidades especiais?',           reaction: 'reflexivo',   isGuess: false },
-    { question: 'É um animal ou criatura não-humana?',                  reaction: 'inquieto',    isGuess: false },
-    { question: 'A série tem mais de 100 episódios?',                   reaction: 'concentrado', isGuess: false },
-    { question: 'É um cartoon brasileiro?',                             reaction: 'reflexivo',   isGuess: false },
-    { question: 'É dos anos 90 ou anterior?',                           reaction: 'inquieto',    isGuess: false },
+  let fallbacksCartoon = [
+    ...(!hasCartoonStudio ? [
+      { question: 'É da Nickelodeon?', reaction: 'concentrado', isGuess: false },
+      { question: 'É do Cartoon Network?', reaction: 'reflexivo', isGuess: false },
+      { question: 'É da Hanna-Barbera (Scooby-Doo, Flintstones)?', reaction: 'inquieto', isGuess: false },
+    ] : []),
+    { question: 'O personagem é um animal (cachorro, urso, rato, etc)?', reaction: 'inquieto', isGuess: false },
+    { question: 'Vive debaixo d\'água?', reaction: 'reflexivo', isGuess: false },
+    { question: 'O personagem tem a pele amarela?', reaction: 'concentrado', isGuess: false },
+    { question: 'O personagem tem a pele verde?', reaction: 'reflexivo', isGuess: false },
+    { question: 'O personagem é uma criança?', reaction: 'inquieto', isGuess: false },
+    { question: 'Usa capa ou roupa de super-herói?', reaction: 'concentrado', isGuess: false },
+    { question: 'Tem poderes ligados a fogo, água ou terra?', reaction: 'reflexivo', isGuess: false },
+    { question: 'Usa óculos?', reaction: 'inquieto', isGuess: false },
+    { question: 'É conhecido por ser muito burro ou atrapalhado?', reaction: 'concentrado', isGuess: false },
+    { question: 'O personagem é um robô ou máquina?', reaction: 'reflexivo', isGuess: false },
   ];
 
-  const fallbacksAnime = [
-    { question: 'É do Dragon Ball?',                       reaction: 'concentrado', isGuess: false },
-    { question: 'É do Naruto?',                            reaction: 'reflexivo',   isGuess: false },
-    { question: 'É do One Piece?',                         reaction: 'inquieto',    isGuess: false },
-    { question: 'É do Attack on Titan?',                   reaction: 'concentrado', isGuess: false },
-    { question: 'É do Demon Slayer?',                      reaction: 'reflexivo',   isGuess: false },
-    { question: 'É do My Hero Academia?',                  reaction: 'inquieto',    isGuess: false },
-    { question: 'É o protagonista?',                       reaction: 'concentrado', isGuess: false },
-    { question: 'Tem superpoderes?',                       reaction: 'reflexivo',   isGuess: false },
-    { question: 'É um vilão?',                             reaction: 'inquieto',    isGuess: false },
-    { question: 'É do Hunter x Hunter?',                   reaction: 'concentrado', isGuess: false },
+  let fallbacksAnime = [
+    ...(!hasAnimeSeries ? [
+      { question: 'É do Dragon Ball?', reaction: 'concentrado', isGuess: false },
+      { question: 'É do Naruto?', reaction: 'reflexivo', isGuess: false },
+      { question: 'É do One Piece?', reaction: 'inquieto', isGuess: false },
+    ] : []),
+    { question: 'Usa uma espada ou katana principal?', reaction: 'inquieto', isGuess: false },
+    { question: 'O personagem tem cabelo branco ou prateado?', reaction: 'reflexivo', isGuess: false },
+    { question: 'O personagem tem cabelo rosa?', reaction: 'concentrado', isGuess: false },
+    { question: 'Costuma usar uma máscara no rosto?', reaction: 'inquieto', isGuess: false },
+    { question: 'Tem alguma cicatriz visível no rosto ou corpo?', reaction: 'reflexivo', isGuess: false },
+    { question: 'Usa uniforme escolar?', reaction: 'concentrado', isGuess: false },
+    { question: 'O personagem é um demônio ou espírito?', reaction: 'inquieto', isGuess: false },
+    { question: 'Pode se transformar ou evoluir fisicamente?', reaction: 'reflexivo', isGuess: false },
   ];
 
-  const fallbacksFicticio = [
-    { question: 'É de um anime?',                                       reaction: 'concentrado', isGuess: false },
-    { question: 'É um cartoon ou animação ocidental (não anime)?',      reaction: 'reflexivo',   isGuess: false },
-    { question: 'É da Marvel?',                                         reaction: 'inquieto',    isGuess: false },
-    { question: 'É da DC Comics?',                                      reaction: 'concentrado', isGuess: false },
-    { question: 'É de um videogame?',                                   reaction: 'reflexivo',   isGuess: false },
-    { question: 'É da Disney ou Pixar?',                                reaction: 'inquieto',    isGuess: false },
-    { question: 'É o protagonista da história?',                        reaction: 'concentrado', isGuess: false },
-    { question: 'Tem superpoderes ou habilidades especiais?',           reaction: 'reflexivo',   isGuess: false },
-    { question: 'É um vilão?',                                          reaction: 'inquieto',    isGuess: false },
-    { question: 'É de um livro ou romance?',                            reaction: 'concentrado', isGuess: false },
+  let fallbacksFicticio = [
+    ...(!isCartoon && !isAnime && !isGame ? [
+      { question: 'É de um anime?', reaction: 'concentrado', isGuess: false },
+      { question: 'É um cartoon ou animação ocidental?', reaction: 'reflexivo', isGuess: false },
+      { question: 'É de um videogame?', reaction: 'reflexivo', isGuess: false },
+    ] : []),
+    { question: 'É o protagonista absoluto da história?', reaction: 'concentrado', isGuess: false },
+    { question: 'O personagem usa armas de fogo?', reaction: 'inquieto', isGuess: false },
+    { question: 'Usa uma armadura metálica pesada?', reaction: 'reflexivo', isGuess: false },
+    { question: 'O personagem é careca?', reaction: 'concentrado', isGuess: false },
+    { question: 'É conhecido por ser incrivelmente rico?', reaction: 'inquieto', isGuess: false },
+    { question: 'Ele tem um parceiro ou mascote que o acompanha?', reaction: 'reflexivo', isGuess: false },
   ];
 
-  // Escolhe o banco de fallbacks mais específico possível com trava de segurança correta
-  const fallbacks = category === 'real'
+  const targetFallbackList = category === 'real'
     ? fallbacksReal
-    : (isCartoon && !isAnime && !isManga && !isGame && !isMarvel && !isDC && !isDisney)
+    : (isCartoon && !isAnime && !isGame)
     ? fallbacksCartoon
-    : (isAnime || isManga || isManhua)
+    : (isAnime || isManga)
     ? fallbacksAnime
     : category === 'ficticio'
     ? fallbacksFicticio
     : [...fallbacksReal, ...fallbacksFicticio];
 
-  const available = fallbacks.find(f => !askedSet.has(normQ(f.question)));
-  if (available) return available;
+  const availableFallbacks = targetFallbackList.filter(f => !askedSet.has(normQ(f.question)));
 
-  return { question: 'Já tenho tudo. Hora de arriscar!', reaction: 'confiante', isGuess: true, character: '__FORCE_GUESS__' };
+  const pickedFallback = getRandomItem(availableFallbacks);
+  
+  if (pickedFallback) {
+    return pickedFallback;
+  }
+
+  return { question: 'Meu instinto já sabe. Vou arriscar!', reaction: 'confiante', isGuess: true, character: '__FORCE_GUESS__' };
 }

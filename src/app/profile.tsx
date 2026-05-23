@@ -13,7 +13,8 @@ import { colors } from '../styles/global';
 import { profileStyles as s } from '../styles/profile';
 
 export default function Profile() {
-  const { user } = useAuth();
+  // Pegamos a função signOut do AuthContext
+  const { user, signOut } = useAuth();
 
   const [profile, setProfile]       = useState<UserProfile>({ name: '', bio: '', photoBase64: null });
   const [loading, setLoading]       = useState(true);
@@ -118,6 +119,26 @@ export default function Profile() {
     Keyboard.dismiss();
   }
 
+  // Lógica de deslogar
+  function handleLogout() {
+    Alert.alert('Sair da conta', 'Tem certeza que deseja sair?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { 
+        text: 'Sair', 
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut();
+            // Caminho corrigido com base na sua estrutura de pastas
+            router.replace('/auth/login'); 
+          } catch (error) {
+            Alert.alert('Erro', 'Não foi possível sair da conta.');
+          }
+        }
+      },
+    ]);
+  }
+
   if (loading) {
     return (
       <View style={s.centered}>
@@ -214,13 +235,18 @@ export default function Profile() {
 
       {/* Grid de estatísticas */}
       <View style={s.statsGrid}>
-        <StatCard label="Vitórias"        value={String(wins)}    accent="#2ecc71" />
-        <StatCard label="Derrotas"        value={String(losses)}  accent="#e74c3c" />
-        <StatCard label="Taxa de acerto"  value={`${winRate}%`}   accent={colors.primary} />
+        <StatCard label="Vitórias"        value={String(wins)}      accent="#2ecc71" />
+        <StatCard label="Derrotas"        value={String(losses)}    accent="#e74c3c" />
+        <StatCard label="Taxa de acerto"  value={`${winRate}%`}     accent={colors.primary} />
         <StatCard label="Melhor seq."     value={String(bestStreak)} accent="#f39c12" />
         <StatCard label="Média perguntas" value={avgQuestions > 0 ? String(avgQuestions) : '—'} accent="#3498db" />
         <StatCard label="Total partidas"  value={String(wins + losses)} accent={colors.gray} />
       </View>
+
+      {/* Botão de Logout */}
+      <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+        <Text style={s.logoutBtnText}>Sair da conta</Text>
+      </TouchableOpacity>
 
     </ScrollView>
   );

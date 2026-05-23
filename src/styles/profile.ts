@@ -210,6 +210,24 @@ export const profileStyles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
+  // NOVO: Estilos do botão de Logout
+  logoutBtn: {
+    width: '100%',
+    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+    borderColor: '#e74c3c',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  logoutBtnText: {
+    color: '#e74c3c',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
   centered: {
     flex: 1,
     alignItems: 'center',
