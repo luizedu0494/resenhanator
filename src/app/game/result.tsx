@@ -10,6 +10,8 @@ import { resultStyles } from '../../styles/result';
 import { searchCharacterImage } from '../../services/imageSearch';
 import { saveResult, revealCharacter, loadHistory, HistoryEntry } from '../../services/history';
 import { publishResult } from '../../services/social';
+import { saveGameKnowledge } from '../../services/aiKnowledge';
+import { inferCategory } from '../../services/groq';
 
 const genieImages = {
   confiante:   require('../../assets/genio_confiante.png'),
@@ -21,11 +23,14 @@ function formatDate(iso: string) {
 }
 
 export default function Result() {
-  const { won, character, questions } = useLocalSearchParams<{
-    won: string; character: string; questions: string;
+  const { won, character, questions, gameHistory } = useLocalSearchParams<{
+    won: string; character: string; questions: string; gameHistory: string;
   }>();
   const didWin = won === 'true';
   const numQ   = Number(questions) || 0;
+  const parsedHistory: { question: string; answer: string }[] = (() => {
+    try { return gameHistory ? JSON.parse(gameHistory) : []; } catch { return []; }
+  })();
 
   const [imageUri, setImageUri]         = useState<string | null>(null);
   const [loadingImage, setLoading]      = useState(true);
@@ -42,6 +47,13 @@ export default function Result() {
       await saveResult({ character: character ?? '', won: didWin, questions: numQ });
       // Publica no feed global (não bloqueia se falhar)
       publishResult({ character: character ?? '', won: didWin, questions: numQ }).catch(() => {});
+      // Salva conhecimento coletivo no Firestore (não bloqueia se falhar)
+      saveGameKnowledge({
+        characterName: character ?? '',
+        wasGuessed: didWin,
+        category: inferCategory(parsedHistory) ?? undefined,
+        gameHistory: parsedHistory,
+      }).catch(() => {});
       const h = await loadHistory();
       setHistory(h);
       // pega o id real (primeiro da lista, que acabou de ser salvo)
@@ -56,10 +68,20 @@ export default function Result() {
   async function handleReveal() {
     if (!revealed.trim() || !entryId) return;
     await revealCharacter(entryId, revealed.trim());
+    // Salva no Firestore o personagem real que o jogador pensou
+    saveGameKnowledge({
+      characterName: revealed.trim(),
+      wasGuessed: false,
+      gameHistory: parsedHistory,
+    }).catch(() => {});
     setRevealSaved(true);
     Keyboard.dismiss();
-    // Atualiza lista local também
     setHistory(h => h.map(e => e.id === entryId ? { ...e, revealedCharacter: revealed.trim() } : e));
+    // Busca a foto do personagem real agora que sabemos quem é
+    setLoading(true);
+    const uri = await searchCharacterImage(revealed.trim());
+    setImageUri(uri);
+    setLoading(false);
   }
 
   async function handleShare() {

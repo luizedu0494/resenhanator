@@ -5,8 +5,8 @@ export const colors = {
   primary: '#8257e5',    
   text: '#ffffff',       
   gray: '#8d8d99',       
-  
- 
+  warning: '#ff9800',
+  success: '#4caf50',
   btnSim: '#2e7d32',
   btnNao: '#c62828',
   btnTalvez: '#ef6c00',

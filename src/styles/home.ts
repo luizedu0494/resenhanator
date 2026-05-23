@@ -13,7 +13,6 @@ export const homeStyles = StyleSheet.create({
     backgroundColor: colors.background,
   },
 
-  // Top bar: saudação + avatar
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
