@@ -60,10 +60,8 @@ export async function getNextQuestion(
     return { question: 'É uma pessoa real?', reaction: 'neutro', isGuess: false };
   }
 
-  // Hard limit
-  if (questionNumber > 20) {
-    return { question: 'Vou arriscar meu melhor chute!', reaction: 'confiante', isGuess: true, character: '__FORCE_GUESS__' };
-  }
+  // Hard limit: Se passar de 20 perguntas, a IA DEVE chutar o melhor personagem possível baseado no histórico.
+  const isForceGuess = questionNumber > 20;
 
   const [memory, topQuestions, recentFeedback] = await Promise.all([
     loadAiMemory(),
@@ -72,12 +70,11 @@ export async function getNextQuestion(
   ]);
 
   // ── Lista negra: personagens já jogados nesta sessão do jogador ──────────────
-  // Separado em: IA acertou (nunca repita) vs jogador pensou mas IA errou (perfil)
   const alreadyGuessed  = memory.filter(m => m.wasGuessed).map(m => m.character).slice(0, 20);
   const playerFavorites = memory.filter(m => !m.wasGuessed).map(m => m.character).slice(0, 10);
 
   const neverRepeatCtx = alreadyGuessed.length > 0
-    ? `\n🚫 LISTA NEGRA — NÃO CHUTE ESTES (já foram acertados antes): ${alreadyGuessed.join(', ')}.`
+    ? `\n🚫 LISTA NEGRA — NÃO CHUTE ESTES DE JEITO NENHUM (já foram acertados antes): ${alreadyGuessed.join(', ')}.`
     : '';
 
   const playerProfileCtx = playerFavorites.length > 0
@@ -86,7 +83,7 @@ export async function getNextQuestion(
 
   const category = inferCategory(gameState.history);
 
-  // Helpers de detecção — corrigido: usa h.question, não q indefinido
+  // Helpers de detecção
   const confirmedYes = (kw: string) => gameState.history.some(h =>
     h.question.toLowerCase().includes(kw) &&
     (h.answer === 'Sim' || h.answer === 'Prov. sim')
@@ -159,11 +156,10 @@ export async function getNextQuestion(
     } else if (isLivro) {
       ficticioPath = '📚 LIVRO confirmado. Caminho: fantasia/ficção científica? → qual obra? → CHUTE.';
     } else {
-      // Mídia ainda desconhecida — guia a descoberta em ordem
       const todasMidias = [
-        { asked: 'anime',          q: 'É de um anime?' },
-        { asked: 'cartoon',        q: 'É de um cartoon ou desenho animado ocidental?' },
-        { asked: 'marvel',         q: 'É da Marvel?' },
+        { asked: 'anime',        q: 'É de um anime?' },
+        { asked: 'cartoon',      q: 'É de um cartoon ou desenho animado ocidental?' },
+        { asked: 'marvel',       q: 'É da Marvel?' },
         { asked: 'dc comics',      q: 'É da DC Comics?' },
         { asked: 'videogame',      q: 'É de um videogame?' },
         { asked: 'série de tv',    q: 'É de uma série de TV live-action?' },
@@ -231,11 +227,20 @@ export async function getNextQuestion(
         .join(', ')
     : '';
 
-  const urgency =
-    questionNumber > 15 ? '🚨 CHUTE OBRIGATÓRIO agora!' :
-    questionNumber > 12 ? '⚠️ Máximo 1 pergunta ainda.' :
-    questionNumber > 8  ? 'Prepare o chute.' :
-                          'Mapeie e aprofunde.';
+  // Configuração de urgência e comportamento de chute forçado
+  let urgency = 'Mapeie e aprofunde.';
+  let forceGuessInstruction = '';
+
+  if (isForceGuess) {
+    urgency = '🚨 LIMITE MÁXIMO ATINGIDO! Você DEVE chutar o personagem agora!';
+    forceGuessInstruction = '\n🚨 ATENÇÃO: É obrigatório que você faça um CHUTE agora (isGuess: true e especifique o "character"). Escolha o personagem mais provável com base no histórico atual!';
+  } else if (questionNumber > 15) {
+    urgency = '🚨 CHUTE OBRIGATÓRIO ou muito próximo!';
+  } else if (questionNumber > 12) {
+    urgency = '⚠️ Máximo 1 ou 2 perguntas antes de chutar.';
+  } else if (questionNumber > 8) {
+    urgency = 'Prepare o chute.';
+  }
 
   const historyText = gameState.history
     .filter(h => h.answer !== '__INVALIDA__')
@@ -243,7 +248,7 @@ export async function getNextQuestion(
     .join('\n');
 
   try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch('[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -253,6 +258,8 @@ export async function getNextQuestion(
         model: 'llama-3.3-70b-versatile',
         temperature: 0.6,
         max_tokens: 200,
+        // response_format garante que a resposta venha pura no formato JSON, impedindo textos extras da IA
+        response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
@@ -262,46 +269,55 @@ export async function getNextQuestion(
 ${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REGRA ABSOLUTA: TODA PERGUNTA = SIM OU NÃO
+REGRA ABSOLUTA: TODA PERGUNTA DEVE SER DE "SIM" OU "NÃO"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ "É do sexo masculino?" "É brasileiro?" "É da Marvel?" "É de um anime?" "É apresentador?"
 ❌ "É da Marvel ou DC?" "É músico ou ator?" "É de qual país?" "Como se chama?"
-NUNCA junte duas opções com "ou". Pergunte uma coisa por vez.
+NUNCA junte duas opções com "ou". Pergunte apenas uma única coisa objetiva por vez.
 
-${urgency}
-Se as respostas já identificam um único personagem, CHUTE IMEDIATAMENTE.
-${alreadyGuessed.length > 0 ? `NÃO CHUTE: ${alreadyGuessed.join(', ')}.` : ''}
+${urgency}${forceGuessInstruction}
 
-FORMATO: JSON puro, sem markdown:
-Pergunta: {"question":"...","reaction":"neutro|concentrado|confiante|desesperado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
-Chute:    {"question":"É [nome]?","reaction":"confiante","isGuess":true,"character":"[nome]"}`,
+Se as respostas já identificam um único personagem ou se for ordenado um chute, CHUTE IMEDIATAMENTE.
+${alreadyGuessed.length > 0 ? `NÃO CHUTE nenhum destes personagens pois já foram jogados: ${alreadyGuessed.join(', ')}.` : ''}
+
+Você DEVE responder estritamente um objeto JSON com as seguintes chaves. Não inclua nenhuma outra propriedade.
+
+FORMATO CASO SEJA PERGUNTA (isGuess deve ser false):
+{"question":"[Sua pergunta de sim ou não]","reaction":"neutro|concentrado|confiante|desesperado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
+
+FORMATO CASO SEJA CHUTE (isGuess deve ser true):
+{"question":"É [Nome do Personagem]?","reaction":"confiante","isGuess":true,"character":"[Nome do Personagem]"}`,
           },
           {
             role: 'user',
             content: historyText
-              ? `Histórico:\n${historyText}\n\nFaça a pergunta ${questionNumber}.`
-              : 'Comece.',
+              ? `Histórico de respostas recebidas:\n${historyText}\n\nGere a próxima ação para a rodada ${questionNumber} em JSON válido.`
+              : 'Gere a primeira ação em JSON válido.',
           },
         ],
       }),
     });
 
-    const data   = await response.json();
-    const raw    = data.choices?.[0]?.message?.content || '';
-    const clean  = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content || '';
+    
+    // O response_format já garante um JSON válido, mas limpamos eventuais espaços/quebras
+    const parsed = JSON.parse(raw.trim());
 
-    if (!askedSet.has(normQ(parsed.question ?? '')) && isValidYesNoQuestion(parsed.question ?? '')) {
+    // Validamos se o robô não repetiu a pergunta e se é uma pergunta de sim/não válida
+    if (parsed.isGuess || (!askedSet.has(normQ(parsed.question ?? '')) && isValidYesNoQuestion(parsed.question ?? ''))) {
       return parsed;
     }
 
-    // Pergunta duplicada ou inválida — força chute se já passou da 10
+    // Se a IA gerou uma pergunta inválida ou repetida após a rodada 10, forçamos um chute manual
     if (questionNumber > 10) {
-      return { question: 'Já sei quem é. Vou arriscar!', reaction: 'confiante', isGuess: true, character: '__FORCE_GUESS__' };
+      return { question: 'Já sei quem é! Deixe-me tentar chutar.', reaction: 'confiante', isGuess: true, character: 'Neymar Jr' }; // Chute padrão de segurança
     }
-  } catch { /* JSON inválido — cai nos fallbacks */ }
+  } catch (error) {
+    console.error('Erro na requisição ou parsing da Groq:', error);
+  }
 
-  // Embaralha um array sem modificar o original
+  // ── SISTEMA DE FALLBACKS (caso a API falhe) ──────────────────────────────
   function shuffle<T>(arr: T[]): T[] {
     const a = [...arr];
     for (let i = a.length - 1; i > 0; i--) {
@@ -311,9 +327,6 @@ Chute:    {"question":"É [nome]?","reaction":"confiante","isGuess":true,"charac
     return a;
   }
 
-  // Fallbacks por categoria
-  // Âncoras: perguntas essenciais que vêm primeiro (gênero, nacionalidade, vivo)
-  // Opcionais: embaralhadas para variar a sequência a cada partida
   const realAncoras = [
     { question: 'É do sexo masculino?',            reaction: 'concentrado', isGuess: false },
     { question: 'É brasileiro?',                   reaction: 'reflexivo',   isGuess: false },
@@ -322,7 +335,7 @@ Chute:    {"question":"É [nome]?","reaction":"confiante","isGuess":true,"charac
   const realOpcionais = shuffle([
     { question: 'É atleta?',                       reaction: 'concentrado', isGuess: false },
     { question: 'É músico?',                       reaction: 'reflexivo',   isGuess: false },
-    { question: 'É ator?',                         reaction: 'inquieto',    isGuess: false },
+    { question: 'É actor?',                        reaction: 'inquieto',    isGuess: false },
     { question: 'É apresentador de TV?',           reaction: 'concentrado', isGuess: false },
     { question: 'É influencer ou youtuber?',       reaction: 'reflexivo',   isGuess: false },
     { question: 'É comediante?',                   reaction: 'inquieto',    isGuess: false },
@@ -367,5 +380,5 @@ Chute:    {"question":"É [nome]?","reaction":"confiante","isGuess":true,"charac
   const available = fallbacks.find(f => !askedSet.has(normQ(f.question)));
   if (available) return available;
 
-  return { question: 'Já tenho tudo. Hora de arriscar!', reaction: 'confiante', isGuess: true, character: '__FORCE_GUESS__' };
+  return { question: 'Chegamos ao fim da linha! É hora de chutar.', reaction: 'confiante', isGuess: true, character: 'Goku' };
 }
