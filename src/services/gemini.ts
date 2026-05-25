@@ -1,5 +1,5 @@
 /**
- * groq.ts — Resenhanator AI
+ * gemini.ts — Resenhanator AI
  */
 
 import { loadAiMemory } from './history';
@@ -270,23 +270,10 @@ export async function getNextQuestion(
   const currentYear = new Date().getFullYear();
 
   try {
-    console.log('🔌 [DEBUG GROQ] Enviando requisição para a IA...');
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.EXPO_PUBLIC_GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.15, // Baixíssima temperatura para evitar alucinações e prezar pela lógica estrita
-        max_tokens: 200,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content:
-`Você é o Resenhanator, gênio que adivinha personagens. Pergunta ${questionNumber}.
+    console.log('🔌 [DEBUG GEMINI] Enviando requisição para a IA...');
+    
+    // Substituímos o endpoint e os dados para se encaixarem no formato do Gemini
+    const systemPrompt = `Você é o Resenhanator, gênio que adivinha personagens. Pergunta ${questionNumber}.
 
 ${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}
 
@@ -297,24 +284,43 @@ LÓGICA: NUNCA contradiga o histórico. Se já sabe quem é, CHUTE.
 ${urgency}${forceGuessInstruction}
 ${alreadyGuessed.length > 0 ? `NÃO CHUTE: ${alreadyGuessed.join(', ')}.` : ''}
 
-Responda APENAS JSON:
-PERGUNTA: {"question":"[Sua pergunta de sim ou não]","reaction":"neutro|concentrado|confiante|desesperado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
-CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character":"[Nome]"}`,
-          },
+Responda APENAS JSON válido com o seguinte formato:
+Para PERGUNTA: {"question":"[Sua pergunta de sim ou não]","reaction":"neutro|concentrado|confiante|desesperado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
+Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character":"[Nome]"}`;
+
+    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.EXPO_PUBLIC_GEMINI_API_KEY}`;
+    
+    const response = await fetch(geminiEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        },
+        contents: [
           {
             role: 'user',
-            content: historyText
-              ? `Histórico de respostas recebidas:\n${historyText}\n\nGere a próxima ação para a rodada ${questionNumber} em JSON válido de acordo com as regras de consistência.`
-              : 'Gere a primeira ação em JSON válido.',
-          },
+            parts: [{ 
+              text: historyText 
+                ? `Histórico de respostas recebidas:\n${historyText}\n\nGere a próxima ação para a rodada ${questionNumber} em JSON válido de acordo com as regras de consistência.`
+                : 'Gere a primeira ação em JSON válido.'
+            }]
+          }
         ],
+        generationConfig: {
+          temperature: 0.15, 
+          maxOutputTokens: 200,
+          responseMimeType: "application/json", // Força o Gemini a devolver JSON limpo
+        }
       }),
     });
 
     if (!response.ok) {
       const errBody = await response.text();
-      console.error(`🔌 [DEBUG GROQ] Erro na API Groq (HTTP ${response.status}):`, errBody);
-      if (response.status === 429 || errBody.includes('token limit') || errBody.includes('rate limit')) {
+      console.error(`🔌 [DEBUG GEMINI] Erro na API (HTTP ${response.status}):`, errBody);
+      if (response.status === 429 || errBody.includes('quota') || errBody.includes('limit')) {
         throw new Error('TOKEN_LIMIT_EXCEEDED');
       } else {
         throw new Error(`HTTP ${response.status}: ${errBody}`);
@@ -322,30 +328,31 @@ CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character
     }
 
     const data = await response.json();
-    if (!data.choices || data.choices.length === 0) {
-      console.error('🔌 [DEBUG GROQ] Resposta da API vazia ou sem choices:', data);
-      throw new Error('Groq retornou choices vazio');
+    if (!data.candidates || data.candidates.length === 0) {
+      console.error('🔌 [DEBUG GEMINI] Resposta da API vazia ou sem candidatos:', data);
+      throw new Error('Gemini retornou candidatos vazio');
     }
 
-    const raw = data.choices[0]?.message?.content || '';
-    console.log('🔌 [DEBUG GROQ] Resposta bruta da Groq:', raw);
+    // O Gemini guarda a resposta na hierarquia abaixo:
+    const raw = data.candidates[0]?.content?.parts[0]?.text || '';
+    console.log('🔌 [DEBUG GEMINI] Resposta bruta:', raw);
     
     const parsed = JSON.parse(raw.trim());
 
     const isRepeated = askedSet.has(normQ(parsed.question ?? ''));
     const isValidForm = isValidYesNoQuestion(parsed.question ?? '');
 
-    console.log('🔌 [DEBUG GROQ] Pergunta já feita?', isRepeated);
-    console.log('🔌 [DEBUG GROQ] Formato sim/não válido?', isValidForm);
+    console.log('🔌 [DEBUG GEMINI] Pergunta já feita?', isRepeated);
+    console.log('🔌 [DEBUG GEMINI] Formato sim/não válido?', isValidForm);
 
     // Se o robô gerou um chute ou uma pergunta válida e inédita, retornamos diretamente
     if (parsed.isGuess || (!isRepeated && isValidForm)) {
       return parsed;
     }
 
-    console.log('⚠️ [DEBUG GROQ] Resposta da IA foi rejeitada (repetida ou inválida). Buscando pergunta de fallback...');
+    console.log('⚠️ [DEBUG GEMINI] Resposta da IA foi rejeitada (repetida ou inválida). Buscando pergunta de fallback...');
   } catch (error: any) {
-    console.error('🚨 [DEBUG GROQ] Erro na requisição ou parsing da Groq:', error?.message || error);
+    console.error('🚨 [DEBUG GEMINI] Erro na requisição ou parsing do Gemini:', error?.message || error);
     if (error?.message === 'TOKEN_LIMIT_EXCEEDED') throw error;
   }
 
@@ -416,7 +423,7 @@ CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character
   });
 
   if (available) {
-    console.log(`🔌 [DEBUG GROQ] Fallback acionado: Perguntando "${available.question}"`);
+    console.log(`🔌 [DEBUG GEMINI] Fallback acionado: Perguntando "${available.question}"`);
     return available;
   }
 

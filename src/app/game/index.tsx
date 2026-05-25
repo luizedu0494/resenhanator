@@ -161,14 +161,10 @@ export default function Game() {
     } catch (err: any) {
       log('API_ERROR', String(err));
       
-      // Se houver falha crítica de rede no meio da partida, usamos o fallback local
-      const fallbackName = getIntelligentFallback(state.history);
-      setQuestion(`Não consegui me conectar aos meus poderes místicos... É o ${fallbackName}?`);
-      setReaction('desesperado');
-      setIsGuess(true);
-      setCharacter(fallbackName);
       if (err.message === 'TOKEN_LIMIT_EXCEEDED') {
         setShowTokenLimitError(true);
+        setQuestion("Meus poderes mentais atingiram o limite por hoje... Preciso descansar!");
+        setReaction('irritado');
         Alert.alert(
           'Limite de Tokens Atingido',
           'Parece que o gênio está cansado de pensar! O limite de perguntas foi atingido. Por favor, tente novamente mais tarde ou reinicie o jogo.',
@@ -177,7 +173,15 @@ export default function Game() {
             { text: 'Fechar', style: 'cancel' },
           ]
         );
+        return; // Interrompe o fluxo para não cair no fallback de chute
       }
+
+      // Se houver falha crítica de rede no meio da partida, usamos o fallback local
+      const fallbackName = getIntelligentFallback(state.history);
+      setQuestion(`Não consegui me conectar aos meus poderes místicos... É o ${fallbackName}?`);
+      setReaction('desesperado');
+      setIsGuess(true);
+      setCharacter(fallbackName);
     } finally {
       setLoading(false);
     }
