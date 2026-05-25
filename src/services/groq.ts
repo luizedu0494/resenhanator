@@ -336,7 +336,11 @@ FORMATO CASO SEJA CHUTE (isGuess deve ser true):
     if (!response.ok) {
       const errBody = await response.text();
       console.error(`🔌 [DEBUG GROQ] Erro na API Groq (HTTP ${response.status}):`, errBody);
-      throw new Error(`HTTP ${response.status}: ${errBody}`);
+      if (response.status === 429 || errBody.includes('token limit') || errBody.includes('rate limit')) {
+        throw new Error('TOKEN_LIMIT_EXCEEDED');
+      } else {
+        throw new Error(`HTTP ${response.status}: ${errBody}`);
+      }
     }
 
     const data = await response.json();

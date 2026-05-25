@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { globalStyles, colors } from '../../styles/global';
 import { gameStyles, guessStyles } from '../../styles/game';
 import { getNextQuestion, GameState, isValidYesNoQuestion } from '../../services/groq';
+import { Alert } from 'react-native';
 import { GameButton } from '../../components/GameButton';
 import { FeedbackButton } from '../../components/FeedbackButton';
 
@@ -113,6 +114,7 @@ export default function Game() {
   const [isGuess, setIsGuess]         = useState(false);
   const [character, setCharacter]     = useState('');
   const [feedback, setFeedback]       = useState<string | undefined>(undefined);
+  const [showTokenLimitError, setShowTokenLimitError] = useState(false);
 
   const gameStateRef = useRef<GameState>({ history: [] });
 
@@ -156,7 +158,7 @@ export default function Game() {
         setFeedback(result.feedback);
       }
 
-    } catch (err) {
+    } catch (err: any) {
       log('API_ERROR', String(err));
       
       // Se houver falha crítica de rede no meio da partida, usamos o fallback local
@@ -165,6 +167,17 @@ export default function Game() {
       setReaction('desesperado');
       setIsGuess(true);
       setCharacter(fallbackName);
+      if (err.message === 'TOKEN_LIMIT_EXCEEDED') {
+        setShowTokenLimitError(true);
+        Alert.alert(
+          'Limite de Tokens Atingido',
+          'Parece que o gênio está cansado de pensar! O limite de perguntas foi atingido. Por favor, tente novamente mais tarde ou reinicie o jogo.',
+          [
+            { text: 'Reiniciar Jogo', onPress: () => router.replace('/') },
+            { text: 'Fechar', style: 'cancel' },
+          ]
+        );
+      }
     } finally {
       setLoading(false);
     }
