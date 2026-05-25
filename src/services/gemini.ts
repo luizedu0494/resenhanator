@@ -5,7 +5,6 @@
 import { loadAiMemory } from './history';
 import { getTopQuestions } from './aiKnowledge';
 import { getRecentInvalidQuestionFeedback } from './feedbackService';
-// Importação do SDK oficial do Google
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface GameState {
@@ -42,6 +41,7 @@ export function isValidYesNoQuestion(question: string): boolean {
 
 /**
  * Impede que perguntas semanticamente idênticas sejam feitas caso os fallbacks locais sejam acionados.
+ * FIX: Adicionadas detecções de variações de "rede de TV" e "programa de humor".
  */
 function isSemanticDuplicate(question: string, askedSet: Set<string>): boolean {
   const q = question.toLowerCase();
@@ -59,6 +59,18 @@ function isSemanticDuplicate(question: string, askedSet: Set<string>): boolean {
   if (q.includes('atleta') || q.includes('esporte') || q.includes('futebol')) {
     return askedList.some(a => a.includes('atleta') || a.includes('esporte') || a.includes('futebol') || a.includes('futebolista'));
   }
+
+  // FIX: bloqueia variações de "qual rede de TV"
+  const tvNetworks = ['globo', 'sbt', 'record', 'band', 'tv aberta', 'televisão aberta', 'rede de tv', 'rede de tele'];
+  if (tvNetworks.some(n => q.includes(n))) {
+    return askedList.some(a => tvNetworks.some(n => a.includes(n)));
+  }
+
+  // FIX: bloqueia variações de "programa de humor/comédia"
+  if (q.includes('programa de humor') || q.includes('programa de comédia')) {
+    return askedList.some(a => a.includes('programa de humor') || a.includes('programa de comédia'));
+  }
+
   return false;
 }
 
@@ -79,12 +91,10 @@ export async function getNextQuestion(
       .map(h => normQ(h.question))
   );
 
-  // Pergunta 1: sempre fixa para definir a categoria base
   if (questionNumber === 1) {
     return { question: 'É uma pessoa real?', reaction: 'neutro', isGuess: false };
   }
 
-  // Hard limit: Se passar de 20 perguntas, a IA DEVE chutar o melhor personagem possível baseado no histórico.
   const isForceGuess = questionNumber > 20;
 
   const [memory, topQuestions, recentFeedback] = await Promise.all([
@@ -93,7 +103,6 @@ export async function getNextQuestion(
     getRecentInvalidQuestionFeedback(10),
   ]);
 
-  // ── Lista negra: personagens já jogados nesta sessão do jogador ──────────────
   const alreadyGuessed  = memory.filter(m => m.wasGuessed).map(m => m.character).slice(0, 20);
   const playerFavorites = memory.filter(m => !m.wasGuessed).map(m => m.character).slice(0, 10);
 
@@ -107,7 +116,6 @@ export async function getNextQuestion(
 
   const category = inferCategory(gameState.history);
 
-  // Helpers de detecção de respostas anteriores
   const confirmedYes = (kw: string) => gameState.history.some(h =>
     h.question.toLowerCase().includes(kw) &&
     (h.answer === 'Sim' || h.answer === 'Prov. sim')
@@ -116,7 +124,6 @@ export async function getNextQuestion(
     h.question.toLowerCase().includes(kw)
   );
 
-  // Mídias fictícias
   const isAnime     = confirmedYes('anime');
   const isManhwa    = confirmedYes('manhwa') || confirmedYes('webtoon');
   const isManga     = confirmedYes('mangá') || confirmedYes('manga');
@@ -130,7 +137,6 @@ export async function getNextQuestion(
   const isFilme     = confirmedYes('filme') && !isAnime && !isCartoon;
   const isLivro     = confirmedYes('livro');
 
-  // Profissões reais
   const isAtleta       = confirmedYes('atleta') || confirmedYes('esporte') || confirmedYes('futebol');
   const isMusico       = confirmedYes('músico') || confirmedYes('cantor') || confirmedYes('cantora');
   const isAtor         = confirmedYes('ator') || confirmedYes('atriz');
@@ -183,15 +189,15 @@ export async function getNextQuestion(
         { asked: 'anime',        q: 'É de um anime?' },
         { asked: 'cartoon',      q: 'É de um cartoon ou desenho animado ocidental?' },
         { asked: 'marvel',       q: 'É da Marvel?' },
-        { asked: 'dc comics',      q: 'É da DC Comics?' },
-        { asked: 'videogame',      q: 'É de um videogame?' },
-        { asked: 'série de tv',    q: 'É de uma série de TV live-action?' },
-        { asked: 'filme',          q: 'É de um filme?' },
-        { asked: 'mangá',          q: 'É de um mangá (não anime)?' },
-        { asked: 'manhwa',         q: 'É de um manhwa ou webtoon?' },
-        { asked: 'livro',          q: 'É originalmente de um livro?' },
-        { asked: 'image comics',   q: 'É da Image Comics?' },
-        { asked: 'dark horse',     q: 'É da Dark Horse Comics?' },
+        { asked: 'dc comics',    q: 'É da DC Comics?' },
+        { asked: 'videogame',    q: 'É de um videogame?' },
+        { asked: 'série de tv',  q: 'É de uma série de TV live-action?' },
+        { asked: 'filme',        q: 'É de um filme?' },
+        { asked: 'mangá',        q: 'É de um mangá (não anime)?' },
+        { asked: 'manhwa',       q: 'É de um manhwa ou webtoon?' },
+        { asked: 'livro',        q: 'É originalmente de um livro?' },
+        { asked: 'image comics', q: 'É da Image Comics?' },
+        { asked: 'dark horse',   q: 'É da Dark Horse Comics?' },
       ].find(u => !alreadyAskedQ(u.asked));
 
       ficticioPath = todasMidias
@@ -207,6 +213,7 @@ export async function getNextQuestion(
     }
   }
 
+  // FIX: Adicionada instrução para a IA pivotar quando uma linha de raciocínio esgota
   const categoryCtx = category === 'real'
     ? '✅ PESSOA REAL.\nCaminho: gênero → nacionalidade → vivo? → área → subárea → CHUTE.\n' +
       'ÁREAS (pergunte uma por vez):\n' +
@@ -216,7 +223,8 @@ export async function getNextQuestion(
       '  Moda/Negócios: modelo, empresário, CEO\n' +
       '  Arte/Cultura: escritor, cineasta\n' +
       '  Política: político, presidente, governador\n' +
-      '  Gastronomia: chef famoso'
+      '  Gastronomia: chef famoso\n\n' +
+      '⚠️ SE UMA LINHA DE PERGUNTAS NÃO ESTÁ AVANÇANDO (ex: perguntou sobre múltiplas redes de TV e todas foram "Não"), ABANDONE essa linha imediatamente e mude de ângulo. Explore outra característica totalmente diferente.'
     : category === 'ficticio'
     ? `✅ FICTÍCIO.\n${ficticioPath}`
     : '⚠️ Ainda não sabe se é real ou fictício.';
@@ -263,9 +271,9 @@ export async function getNextQuestion(
     urgency = 'Prepare o chute.';
   }
 
+  // FIX: Removido slice(-5) — enviando histórico completo para evitar perda de contexto crítico
   const historyText = gameState.history
     .filter(h => h.answer !== '__INVALIDA__')
-    .slice(-5)
     .map((h, i) => `${i + 1}. "${h.question}" → ${h.answer}`)
     .join('\n');
 
@@ -319,7 +327,6 @@ Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"char
       console.warn('⚠️ [DEBUG GEMINI] Resposta parece truncada! Considere aumentar maxOutputTokens.');
     }
     
-    // ─── LIMPEZA BLINDADA COM REGEX ───
     let cleanRaw = raw.trim();
     const jsonMatch = cleanRaw.match(/\{[\s\S]*\}/);
     
@@ -328,7 +335,6 @@ Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"char
     }
     
     cleanRaw = jsonMatch[0];
-    
     const parsed = JSON.parse(cleanRaw);
 
     const isRepeated = askedSet.has(normQ(parsed.question ?? ''));

@@ -40,6 +40,7 @@ export function isValidYesNoQuestion(question: string): boolean {
 
 /**
  * Impede que perguntas semanticamente idênticas sejam feitas caso os fallbacks locais sejam acionados.
+ * FIX: Adicionadas detecções de variações de "rede de TV" e "programa de humor".
  */
 function isSemanticDuplicate(question: string, askedSet: Set<string>): boolean {
   const q = question.toLowerCase();
@@ -57,6 +58,18 @@ function isSemanticDuplicate(question: string, askedSet: Set<string>): boolean {
   if (q.includes('atleta') || q.includes('esporte') || q.includes('futebol')) {
     return askedList.some(a => a.includes('atleta') || a.includes('esporte') || a.includes('futebol') || a.includes('futebolista'));
   }
+
+  // FIX: bloqueia variações de "qual rede de TV"
+  const tvNetworks = ['globo', 'sbt', 'record', 'band', 'tv aberta', 'televisão aberta', 'rede de tv', 'rede de tele'];
+  if (tvNetworks.some(n => q.includes(n))) {
+    return askedList.some(a => tvNetworks.some(n => a.includes(n)));
+  }
+
+  // FIX: bloqueia variações de "programa de humor/comédia"
+  if (q.includes('programa de humor') || q.includes('programa de comédia')) {
+    return askedList.some(a => a.includes('programa de humor') || a.includes('programa de comédia'));
+  }
+
   return false;
 }
 
@@ -205,6 +218,7 @@ export async function getNextQuestion(
     }
   }
 
+  // FIX: Adicionada instrução para a IA pivotar quando uma linha de raciocínio esgota
   const categoryCtx = category === 'real'
     ? '✅ PESSOA REAL.\nCaminho: gênero → nacionalidade → vivo? → área → subárea → CHUTE.\n' +
       'ÁREAS (pergunte uma por vez):\n' +
@@ -214,7 +228,8 @@ export async function getNextQuestion(
       '  Moda/Negócios: modelo, empresário, CEO\n' +
       '  Arte/Cultura: escritor, cineasta\n' +
       '  Política: político, presidente, governador\n' +
-      '  Gastronomia: chef famoso'
+      '  Gastronomia: chef famoso\n\n' +
+      '⚠️ SE UMA LINHA DE PERGUNTAS NÃO ESTÁ AVANÇANDO (ex: perguntou sobre múltiplas redes de TV e todas foram "Não"), ABANDONE essa linha imediatamente e mude de ângulo. Explore outra característica totalmente diferente.'
     : category === 'ficticio'
     ? `✅ FICTÍCIO.\n${ficticioPath}`
     : '⚠️ Ainda não sabe se é real ou fictício.';
@@ -261,9 +276,9 @@ export async function getNextQuestion(
     urgency = 'Prepare o chute.';
   }
 
+  // FIX: Removido slice(-5) — enviando histórico completo para evitar perda de contexto crítico
   const historyText = gameState.history
     .filter(h => h.answer !== '__INVALIDA__')
-    .slice(-5) // Envia apenas as últimas 5 interações para economizar tokens
     .map((h, i) => `${i + 1}. "${h.question}" → ${h.answer}`)
     .join('\n');
 
@@ -279,7 +294,7 @@ export async function getNextQuestion(
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        temperature: 0.15, // Baixíssima temperatura para evitar alucinações e prezar pela lógica estrita
+        temperature: 0.15,
         max_tokens: 200,
         response_format: { type: 'json_object' },
         messages: [
@@ -338,7 +353,6 @@ CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character
     console.log('🔌 [DEBUG GROQ] Pergunta já feita?', isRepeated);
     console.log('🔌 [DEBUG GROQ] Formato sim/não válido?', isValidForm);
 
-    // Se o robô gerou um chute ou uma pergunta válida e inédita, retornamos diretamente
     if (parsed.isGuess || (!isRepeated && isValidForm)) {
       return parsed;
     }
@@ -408,7 +422,6 @@ CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character
     ? fallbacksFicticio
     : [...ficticioAncoras, ...realAncoras, ...shuffle([...ficticioOpcionais, ...realOpcionais])];
 
-  // Filtra fallbacks que sejam repetições semânticas das perguntas do histórico
   const available = fallbacks.find(f => {
     const isAsked = askedSet.has(normQ(f.question));
     const isSemanticDup = isSemanticDuplicate(f.question, askedSet);
@@ -420,7 +433,6 @@ CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character
     return available;
   }
 
-  // Chute de segurança definitivo baseado na categoria (caso tudo falhe)
   const defaultGuess = category === 'real' ? 'Silvio Santos' : 'Goku';
   return { 
     question: `É o ${defaultGuess}?`, 
