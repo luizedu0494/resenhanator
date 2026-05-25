@@ -33,7 +33,7 @@ Apresentação do jogo em três slides antes do login.
 Fluxo de login, cadastro e recuperação de senha com validação em tempo real.
 
 <p align="center">
-  <img src="assets/inicio.png" width="30%" />
+  <img src="assets/login.png" width="30%" />
   <img src="assets/cadastro.png" width="30%" />
   <img src="assets/esqueceusenha.png" width="30%" />
 </p>
