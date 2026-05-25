@@ -20,7 +20,12 @@ export default function Splash() {
         style={splashStyles.image}
         resizeMode="contain"
       />
-      <Text style={globalStyles.title}>Resenhanator</Text>
+
+      {/* Nome com destaque no "AI" */}
+      <Text style={splashStyles.appName}>
+        Decifr<Text style={splashStyles.appNameHighlight}>AI</Text>
+      </Text>
+
       <Text style={splashStyles.subtitle}>Eu vou adivinhar quem você está pensando...</Text>
     </View>
   );

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "resenhanator",
-    "slug": "resenhanator",
+    "name": "DecifrAI",
+    "slug": "decifrai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

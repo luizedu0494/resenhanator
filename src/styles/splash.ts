@@ -7,11 +7,21 @@ export const splashStyles = StyleSheet.create({
     height: 350,
     resizeMode: 'contain',
   },
+  appName: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: 1,
+    marginTop: 8,
+  },
+  appNameHighlight: {
+    color: colors.primary,
+  },
   subtitle: {
     fontSize: 14,
     color: colors.gray,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 6,
     paddingHorizontal: 40,
   },
 });

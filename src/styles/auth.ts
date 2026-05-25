@@ -2,6 +2,25 @@ import { StyleSheet } from 'react-native';
 import { colors } from './global';
 
 export const authStyles = StyleSheet.create({
+  appNameContainer: {
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  appNameText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: 1,
+  },
+  appNameHighlight: {
+    color: colors.primary,
+  },
+  appTagline: {
+    fontSize: 13,
+    color: colors.gray,
+    marginTop: 4,
+    textAlign: 'center',
+  },
   image: {
     width: 220,
     height: 260,
@@ -41,7 +60,6 @@ export const authStyles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-
   sentText: {
     color: colors.gray,
     fontSize: 14,
@@ -50,26 +68,24 @@ export const authStyles = StyleSheet.create({
     marginVertical: 20,
     paddingHorizontal: 20,
   },
-
   error: {
-  color: '#ff4444',
-  fontSize: 13,
-  textAlign: 'center',
-  marginTop: 4,
+    color: '#ff4444',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 4,
   },
-
   googleButton: {
-  width: '50%',
-  height: 50,
-  backgroundColor: '#fff',
-  borderRadius: 8,
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginVertical: 5,
-},
-googleButtonText: {
-  color: '#121214',
-  fontSize: 16,
-  fontWeight: '600',
-},
+    width: '50%',
+    height: 50,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 5,
+  },
+  googleButtonText: {
+    color: '#121214',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

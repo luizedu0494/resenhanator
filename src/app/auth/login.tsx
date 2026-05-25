@@ -41,6 +41,14 @@ export default function Login() {
   return (
     <View style={globalStyles.container}>
 
+      {/* Nome do app com destaque no "AI" */}
+      <View style={authStyles.appNameContainer}>
+        <Text style={authStyles.appNameText}>
+          Decifr<Text style={authStyles.appNameHighlight}>AI</Text>
+        </Text>
+        <Text style={authStyles.appTagline}>Eu sei quem você está pensando...</Text>
+      </View>
+
       <Image
         source={require('../../assets/genio_confiante.png')}
         style={authStyles.image}
