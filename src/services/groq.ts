@@ -263,6 +263,7 @@ export async function getNextQuestion(
 
   const historyText = gameState.history
     .filter(h => h.answer !== '__INVALIDA__')
+    .slice(-5) // Envia apenas as últimas 5 interações para economizar tokens
     .map((h, i) => `${i + 1}. "${h.question}" → ${h.answer}`)
     .join('\n');
 
@@ -285,43 +286,20 @@ export async function getNextQuestion(
           {
             role: 'system',
             content:
-`Você é o Resenhanator, um gênio arrogante que adivinha personagens. Pergunta ${questionNumber}.
+`Você é o Resenhanator, gênio que adivinha personagens. Pergunta ${questionNumber}.
 
 ${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONTEXTO TEMPORAL DINÂMICO (ANO DE ${currentYear})
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ ESTAMOS ATUALMENTE NO ANO DE ${currentYear}! 
-- Se o histórico confirmou que o personagem "Está vivo? → Sim", você NUNCA pode chutar ou considerar alguém que faleceu antes ou durante o ano de ${currentYear} (Exemplo: Silvio Santos faleceu em 2024, portanto ele NÃO está vivo em ${currentYear}!).
-- Lembre-se de cruzar as datas biográficas do personagem com o ano de ${currentYear} para validar se a pessoa de fato estaria viva hoje.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REGRA ABSOLUTA: PROIBIDO PERGUNTAS REPETITIVAS OU CUMULATIVAS (EVITE O LOOP)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ NÃO CRIE perguntas longas apenas juntando adjetivos que você já sabe que são verdades! (Ex: Se já sabe que ele é "brasileiro", "apresentador" e "comediante", NUNCA pergunte "É um apresentador comediante brasileiro irreverente na TV aberta?"). Isso irrita o jogador e desperdiça rodadas!
-✅ FAÇA perguntas objetivas buscando NOVAS informações de eliminação (Ex: "Ficou conhecido na RedeTV ou na Band?", "Seu programa passava aos domingos?", "Tem cabelo comprido?", "Usa óculos?", "Ficou famoso no rádio antes da TV?", "Ficou famoso no programa Pânico?").
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REGRA DE OURO: CONSISTÊNCIA LÓGICA MÁXIMA
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Você NUNCA pode fazer uma pergunta ou dar um chute que contradiga as respostas dadas no histórico.
-Analise meticulosamente cada linha do histórico antes de tomar uma decisão:
-- Se o jogador respondeu "Sim" para "É brasileiro?", o seu personagem final DEVE ser brasileiro. Nunca chute um estrangeiro!
-- Se respondeu "Não" para "É ator?", não pergunte se ele fez novelas.
+CONTEXTO: Ano ${currentYear}. Se vivo, deve estar vivo hoje.
+REGRAS: Sem perguntas repetitivas/cumulativas. Busque NOVAS informações.
+LÓGICA: NUNCA contradiga o histórico. Se já sabe quem é, CHUTE.
 
 ${urgency}${forceGuessInstruction}
+${alreadyGuessed.length > 0 ? `NÃO CHUTE: ${alreadyGuessed.join(', ')}.` : ''}
 
-Se as respostas já identificam um único personagem ou se for ordenado um chute, CHUTE IMEDIATAMENTE.
-${alreadyGuessed.length > 0 ? `NÃO CHUTE nenhum destes personagens pois já foram jogados: ${alreadyGuessed.join(', ')}.` : ''}
-
-Você DEVE responder estritamente um objeto JSON com as seguintes chaves. Não inclua nenhuma outra propriedade.
-
-FORMATO CASO SEJA PERGUNTA (isGuess deve ser false):
-{"question":"[Sua pergunta de sim ou não]","reaction":"neutro|concentrado|confiante|desesperado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
-
-FORMATO CASO SEJA CHUTE (isGuess deve ser true):
-{"question":"É [Nome do Personagem]?","reaction":"confiante","isGuess":true,"character":"[Nome do Personagem]"}`,
+Responda APENAS JSON:
+PERGUNTA: {"question":"[Sua pergunta de sim ou não]","reaction":"neutro|concentrado|confiante|desesperado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
+CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character":"[Nome]"}`,
           },
           {
             role: 'user',
