@@ -6,8 +6,7 @@ import {
 import { router } from 'expo-router';
 import { globalStyles, colors } from '../../styles/global';
 import { gameStyles, guessStyles } from '../../styles/game';
-// Alterado o import de groq para gemini
-import { getNextQuestion, GameState, isValidYesNoQuestion } from '../../services/gemini';
+import { getNextQuestion, GameState, isValidYesNoQuestion } from '../../services/ai';
 import { Alert } from 'react-native';
 import { GameButton } from '../../components/GameButton';
 import { FeedbackButton } from '../../components/FeedbackButton';
@@ -130,7 +129,7 @@ export default function Game() {
       setFeedback(undefined);
       log('API_REQUEST', { questionNumber: state.history.length + 1 });
 
-      // Chamada para o serviço do Gemini atualizado
+      // O orquestrador ai.ts decidirá se usa Groq ou Gemini de forma sequencial
       const result = await getNextQuestion(state);
 
       log('API_RESPONSE', {
@@ -141,7 +140,6 @@ export default function Game() {
         feedback: result.feedback ?? null,
       });
 
-      // Valida se a pergunta gerada pela IA é de Sim/Não
       const isValidQuestion = isValidYesNoQuestion(result.question);
       if (!isValidQuestion) {
         log('INVALID_QUESTION_DETECTED', { question: result.question });
@@ -168,16 +166,15 @@ export default function Game() {
         setReaction('irritado');
         Alert.alert(
           'Limite de Tokens Atingido',
-          'Parece que o gênio está cansado de pensar! O limite de perguntas foi atingido. Por favor, tente novamente mais tarde ou reinicie o jogo.',
+          'Parece que o gênio está cansado de pensar! O limite de perguntas de todos os provedores foi atingido. Por favor, tente novamente mais tarde.',
           [
             { text: 'Reiniciar Jogo', onPress: () => router.replace('/') },
             { text: 'Fechar', style: 'cancel' },
           ]
         );
-        return; // Interrompe o fluxo para não cair no fallback de chute
+        return;
       }
 
-      // Se houver falha crítica de rede no meio da partida, usamos o fallback local
       const fallbackName = getIntelligentFallback(state.history);
       setQuestion(`Não consegui me conectar aos meus poderes místicos... É o ${fallbackName}?`);
       setReaction('desesperado');
@@ -253,7 +250,6 @@ export default function Game() {
 
       <Text style={gameStyles.counter}>Pergunta {questionNumber}</Text>
 
-      {/* ── Botão de Feedback ── */}
       {feedback === 'invalid_question' && !loading && (
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
           <FeedbackButton 
@@ -270,7 +266,6 @@ export default function Game() {
 
       <View style={gameStyles.buttonsContainer}>
         {isGuess ? (
-          /* ── Modo chute ── */
           <View style={guessStyles.container}>
             <Text style={guessStyles.hint}>É esse?</Text>
             <View style={guessStyles.row}>
@@ -298,7 +293,6 @@ export default function Game() {
             </View>
           </View>
         ) : (
-          /* ── Modo pergunta ── */
           <>
             {buttonRows.map((row, rowIdx) => (
               <View key={rowIdx} style={gameStyles.buttonRow}>

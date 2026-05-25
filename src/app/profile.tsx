@@ -14,6 +14,8 @@ import { profileStyles as s } from '../styles/profile';
 
 export default function Profile() {
   // Pegamos a função signOut do AuthContext
+  const authData = useAuth();
+  console.log("🕵️ RAIO-X DO CONTEXTO:", authData);
   const { user, signOut } = useAuth();
 
   const [profile, setProfile]       = useState<UserProfile>({ name: '', bio: '', photoBase64: null });
@@ -119,7 +121,7 @@ export default function Profile() {
     Keyboard.dismiss();
   }
 
-  // Lógica de deslogar
+  // Lógica de deslogar simplificada
   function handleLogout() {
     Alert.alert('Sair da conta', 'Tem certeza que deseja sair?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -128,10 +130,11 @@ export default function Profile() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await signOut();
-            // Caminho corrigido com base na sua estrutura de pastas
-            router.replace('/auth/login'); 
+            // Chama a função do contexto.
+            // A mágica do redirecionamento vai acontecer sozinha lá no AuthContext!
+            await signOut(); 
           } catch (error) {
+            console.error(error);
             Alert.alert('Erro', 'Não foi possível sair da conta.');
           }
         }

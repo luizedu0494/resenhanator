@@ -297,7 +297,7 @@ Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"char
     const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY);
     
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.5-flash",
+      model: "gemini-3.1-flash-lite",
       systemInstruction: systemPrompt,
       generationConfig: {
         temperature: 0.15,

@@ -3,8 +3,8 @@ import { colors } from './global';
 
 export const authStyles = StyleSheet.create({
   image: {
-    width: 150,
-    height: 180,
+    width: 220,
+    height: 260,
     marginBottom: 10,
   },
   form: {
