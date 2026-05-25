@@ -6,7 +6,8 @@ import {
 import { router } from 'expo-router';
 import { globalStyles, colors } from '../../styles/global';
 import { gameStyles, guessStyles } from '../../styles/game';
-import { getNextQuestion, GameState, isValidYesNoQuestion } from '../../services/groq';
+// Alterado o import de groq para gemini
+import { getNextQuestion, GameState, isValidYesNoQuestion } from '../../services/gemini';
 import { Alert } from 'react-native';
 import { GameButton } from '../../components/GameButton';
 import { FeedbackButton } from '../../components/FeedbackButton';
@@ -129,7 +130,7 @@ export default function Game() {
       setFeedback(undefined);
       log('API_REQUEST', { questionNumber: state.history.length + 1 });
 
-      // Aqui chamamos o nosso serviço do groq.ts atualizado
+      // Chamada para o serviço do Gemini atualizado
       const result = await getNextQuestion(state);
 
       log('API_RESPONSE', {

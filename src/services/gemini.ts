@@ -5,6 +5,8 @@
 import { loadAiMemory } from './history';
 import { getTopQuestions } from './aiKnowledge';
 import { getRecentInvalidQuestionFeedback } from './feedbackService';
+// Importação do SDK oficial do Google
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface GameState {
   history: { question: string; answer: string }[];
@@ -263,16 +265,19 @@ export async function getNextQuestion(
 
   const historyText = gameState.history
     .filter(h => h.answer !== '__INVALIDA__')
-    .slice(-5) // Envia apenas as últimas 5 interações para economizar tokens
+    .slice(-5)
     .map((h, i) => `${i + 1}. "${h.question}" → ${h.answer}`)
     .join('\n');
 
   const currentYear = new Date().getFullYear();
 
   try {
-    console.log('🔌 [DEBUG GEMINI] Enviando requisição para a IA...');
+    console.log('🔌 [DEBUG GEMINI] Enviando requisição para a IA com o SDK oficial...');
     
-    // Substituímos o endpoint e os dados para se encaixarem no formato do Gemini
+    if (!process.env.EXPO_PUBLIC_GEMINI_API_KEY) {
+      throw new Error("API_KEY_UNDEFINED: A chave do Gemini não foi encontrada no arquivo .env");
+    }
+
     const systemPrompt = `Você é o Resenhanator, gênio que adivinha personagens. Pergunta ${questionNumber}.
 
 ${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}
@@ -284,60 +289,47 @@ LÓGICA: NUNCA contradiga o histórico. Se já sabe quem é, CHUTE.
 ${urgency}${forceGuessInstruction}
 ${alreadyGuessed.length > 0 ? `NÃO CHUTE: ${alreadyGuessed.join(', ')}.` : ''}
 
-Responda APENAS JSON válido com o seguinte formato:
+IMPORTANTE E CRÍTICO: NÃO INCLUA NENHUM TEXTO, SAUDAÇÃO OU EXPLICAÇÃO ANTES OU DEPOIS. RESPONDA APENAS E ESTRITAMENTE COM O OBJETO JSON.
+
 Para PERGUNTA: {"question":"[Sua pergunta de sim ou não]","reaction":"neutro|concentrado|confiante|desesperado|esnobe|inquieto|irritado|reflexivo","isGuess":false}
 Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"character":"[Nome]"}`;
 
-    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.EXPO_PUBLIC_GEMINI_API_KEY}`;
+    const genAI = new GoogleGenerativeAI(process.env.EXPO_PUBLIC_GEMINI_API_KEY);
     
-    const response = await fetch(geminiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }]
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ 
-              text: historyText 
-                ? `Histórico de respostas recebidas:\n${historyText}\n\nGere a próxima ação para a rodada ${questionNumber} em JSON válido de acordo com as regras de consistência.`
-                : 'Gere a primeira ação em JSON válido.'
-            }]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.15, 
-          maxOutputTokens: 200,
-          responseMimeType: "application/json", // Força o Gemini a devolver JSON limpo
-        }
-      }),
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.5-flash",
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        temperature: 0.15,
+        maxOutputTokens: 1024,
+      }
     });
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error(`🔌 [DEBUG GEMINI] Erro na API (HTTP ${response.status}):`, errBody);
-      if (response.status === 429 || errBody.includes('quota') || errBody.includes('limit')) {
-        throw new Error('TOKEN_LIMIT_EXCEEDED');
-      } else {
-        throw new Error(`HTTP ${response.status}: ${errBody}`);
-      }
-    }
+    const userMessage = historyText 
+      ? `Histórico de respostas recebidas:\n${historyText}\n\nGere a próxima ação para a rodada ${questionNumber} em JSON válido de acordo com as regras de consistência.`
+      : 'Gere a primeira ação em JSON válido.';
 
-    const data = await response.json();
-    if (!data.candidates || data.candidates.length === 0) {
-      console.error('🔌 [DEBUG GEMINI] Resposta da API vazia ou sem candidatos:', data);
-      throw new Error('Gemini retornou candidatos vazio');
-    }
-
-    // O Gemini guarda a resposta na hierarquia abaixo:
-    const raw = data.candidates[0]?.content?.parts[0]?.text || '';
-    console.log('🔌 [DEBUG GEMINI] Resposta bruta:', raw);
+    const response = await model.generateContent(userMessage);
+    const raw = response.response.text() || '';
     
-    const parsed = JSON.parse(raw.trim());
+    console.log('🔌 [DEBUG GEMINI] Tamanho da resposta:', raw.length, 'chars');
+    console.log('🔌 [DEBUG GEMINI] Resposta bruta:', raw);
+
+    if (raw.length > 0 && !raw.trim().endsWith('}')) {
+      console.warn('⚠️ [DEBUG GEMINI] Resposta parece truncada! Considere aumentar maxOutputTokens.');
+    }
+    
+    // ─── LIMPEZA BLINDADA COM REGEX ───
+    let cleanRaw = raw.trim();
+    const jsonMatch = cleanRaw.match(/\{[\s\S]*\}/);
+    
+    if (!jsonMatch) {
+      throw new Error("Nenhum objeto JSON foi encontrado na resposta bruta da IA.");
+    }
+    
+    cleanRaw = jsonMatch[0];
+    
+    const parsed = JSON.parse(cleanRaw);
 
     const isRepeated = askedSet.has(normQ(parsed.question ?? ''));
     const isValidForm = isValidYesNoQuestion(parsed.question ?? '');
@@ -345,7 +337,6 @@ Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"char
     console.log('🔌 [DEBUG GEMINI] Pergunta já feita?', isRepeated);
     console.log('🔌 [DEBUG GEMINI] Formato sim/não válido?', isValidForm);
 
-    // Se o robô gerou um chute ou uma pergunta válida e inédita, retornamos diretamente
     if (parsed.isGuess || (!isRepeated && isValidForm)) {
       return parsed;
     }
@@ -353,7 +344,9 @@ Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"char
     console.log('⚠️ [DEBUG GEMINI] Resposta da IA foi rejeitada (repetida ou inválida). Buscando pergunta de fallback...');
   } catch (error: any) {
     console.error('🚨 [DEBUG GEMINI] Erro na requisição ou parsing do Gemini:', error?.message || error);
-    if (error?.message === 'TOKEN_LIMIT_EXCEEDED') throw error;
+    if (error?.message === 'TOKEN_LIMIT_EXCEEDED' || error?.message?.includes('429') || error?.message?.includes('quota')) {
+      throw new Error('TOKEN_LIMIT_EXCEEDED');
+    }
   }
 
   function shuffle<T>(arr: T[]): T[] {
@@ -415,7 +408,6 @@ Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"char
     ? fallbacksFicticio
     : [...ficticioAncoras, ...realAncoras, ...shuffle([...ficticioOpcionais, ...realOpcionais])];
 
-  // Filtra fallbacks que sejam repetições semânticas das perguntas do histórico
   const available = fallbacks.find(f => {
     const isAsked = askedSet.has(normQ(f.question));
     const isSemanticDup = isSemanticDuplicate(f.question, askedSet);
@@ -427,7 +419,6 @@ Para CHUTE: {"question":"É [Nome]?","reaction":"confiante","isGuess":true,"char
     return available;
   }
 
-  // Chute de segurança definitivo baseado na categoria (caso tudo falhe)
   const defaultGuess = category === 'real' ? 'Silvio Santos' : 'Goku';
   return { 
     question: `É o ${defaultGuess}?`, 
