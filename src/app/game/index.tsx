@@ -74,18 +74,41 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ─── Fallback Inteligente (quando a API falha) ───────────────────────────────
 
-function getIntelligentFallback(facts: string): string {
-  const lowerFacts = facts.toLowerCase();
-  
-  if (lowerFacts.includes('mar') || lowerFacts.includes('água') || lowerFacts.includes('esponja')) return 'Bob Esponja';
-  if (lowerFacts.includes('alien') || lowerFacts.includes('relógio') || lowerFacts.includes('ben')) return 'Ben Tennyson';
-  if (lowerFacts.includes('medo') || lowerFacts.includes('cachorro') || lowerFacts.includes('mistério') || lowerFacts.includes('fantasma')) return 'Salsicha';
-  if (lowerFacts.includes('ninja') || lowerFacts.includes('anime') || lowerFacts.includes('naruto')) return 'Naruto';
-  if (lowerFacts.includes('sayajin') || lowerFacts.includes('esfera') || lowerFacts.includes('goku')) return 'Goku';
-  if (lowerFacts.includes('morcego') || lowerFacts.includes('gotham') || lowerFacts.includes('rico')) return 'Batman';
-  if (lowerFacts.includes('aranha') || lowerFacts.includes('teia') || lowerFacts.includes('marvel')) return 'Homem-Aranha';
-  
-  // Resposta genérica caso não ache padrão
+function getIntelligentFallback(history: { question: string; answer: string }[]): string {
+  // Função auxiliar para checar se o jogador respondeu "Sim" para alguma palavra-chave
+  const isYes = (kw: string) => history.some(h =>
+    h.question.toLowerCase().includes(kw) && (h.answer === 'Sim' || h.answer === 'Prov. sim')
+  );
+
+  // Animação Ocidental / Cartoons
+  if (isYes('cartoon') || isYes('animação ocidental')) {
+    if (isYes('esponja') || isYes('fenda do biquíni') || isYes('água') || isYes('mar')) return 'Bob Esponja';
+    if (isYes('cartoon network') && isYes('criança')) return 'Ben Tennyson';
+    if (isYes('medo') || isYes('cachorro') || isYes('fantasma') || isYes('scooby')) return 'Salsicha';
+    if (isYes('fox') || isYes('amarela') || isYes('simpsons')) return 'Homer Simpson';
+    return 'Pernalonga'; // Cartoon Genérico
+  }
+
+  // Animes
+  if (isYes('anime')) {
+    if (isYes('ninja') || isYes('aldeia') || isYes('naruto')) return 'Naruto';
+    if (isYes('sayajin') || isYes('esfera') || isYes('goku')) return 'Goku';
+    if (isYes('pirata') || isYes('borracha')) return 'Luffy';
+    return 'Goku'; // Anime Genérico
+  }
+
+  // Heróis
+  if (isYes('marvel') || isYes('aranha') || isYes('teia')) return 'Homem-Aranha';
+  if (isYes('dc comics') || isYes('morcego') || isYes('gotham')) return 'Batman';
+
+  // Pessoas Reais
+  if (isYes('pessoa real')) {
+    if (isYes('futebol')) return 'Pelé';
+    if (isYes('música') || isYes('cantor')) return 'Michael Jackson';
+    return 'Neymar'; // Real genérico
+  }
+
+  // Resposta genérica absoluta caso não ache padrão nenhum
   return 'Mickey Mouse';
 }
 
@@ -180,7 +203,7 @@ async function forceGuessFromAPI(history: { question: string; answer: string }[]
 
   // Se esgotou as 3 tentativas e não retornou nada, usa o fallback baseado no histórico
   log('FORCE_GUESS_FAILED', 'Todas as tentativas falharam. Usando Fallback Inteligente.');
-  const fallbackName = getIntelligentFallback(factsText);
+  const fallbackName = getIntelligentFallback(history);
   log('FORCE_GUESS_FALLBACK', { name: fallbackName });
   
   return fallbackName;
