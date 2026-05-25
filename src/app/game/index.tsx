@@ -68,148 +68,41 @@ function printGameSummary(history: { question: string; answer: string }[], final
   console.log('\n');
 }
 
-// ─── Utilitário de Delay ─────────────────────────────────────────────────────
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// ─── Fallback Inteligente (quando a API falha) ───────────────────────────────
+// ─── Fallback Inteligente Local (Apenas para falhas de rede físicas) ──────────
 
 function getIntelligentFallback(history: { question: string; answer: string }[]): string {
-  // Função auxiliar para checar se o jogador respondeu "Sim" para alguma palavra-chave
   const isYes = (kw: string) => history.some(h =>
     h.question.toLowerCase().includes(kw) && (h.answer === 'Sim' || h.answer === 'Prov. sim')
   );
 
-  // Animação Ocidental / Cartoons
   if (isYes('cartoon') || isYes('animação ocidental')) {
     if (isYes('esponja') || isYes('fenda do biquíni') || isYes('água') || isYes('mar')) return 'Bob Esponja';
     if (isYes('cartoon network') && isYes('criança')) return 'Ben Tennyson';
     if (isYes('medo') || isYes('cachorro') || isYes('fantasma') || isYes('scooby')) return 'Salsicha';
     if (isYes('fox') || isYes('amarela') || isYes('simpsons')) return 'Homer Simpson';
-    return 'Pernalonga'; // Cartoon Genérico
+    return 'Pernalonga';
   }
 
-  // Animes
   if (isYes('anime')) {
     if (isYes('ninja') || isYes('aldeia') || isYes('naruto')) return 'Naruto';
     if (isYes('sayajin') || isYes('esfera') || isYes('goku')) return 'Goku';
     if (isYes('pirata') || isYes('borracha')) return 'Luffy';
-    return 'Goku'; // Anime Genérico
+    return 'Goku';
   }
 
-  // Heróis
   if (isYes('marvel') || isYes('aranha') || isYes('teia')) return 'Homem-Aranha';
   if (isYes('dc comics') || isYes('morcego') || isYes('gotham')) return 'Batman';
 
-  // Pessoas Reais
   if (isYes('pessoa real')) {
     if (isYes('futebol')) return 'Pelé';
     if (isYes('música') || isYes('cantor')) return 'Michael Jackson';
-    return 'Neymar'; // Real genérico
+    return 'Neymar';
   }
 
-  // Resposta genérica absoluta caso não ache padrão nenhum
   return 'Mickey Mouse';
 }
 
-// ─── Função para forçar chute via API quando character === '__FORCE_GUESS__' ──
-
-async function forceGuessFromAPI(history: { question: string; answer: string }[]): Promise<string> {
-  log('FORCE_GUESS', 'Limite atingido — chamando API para chute final');
-
-  const factsText = history
-    .map(h => {
-      const q = h.question
-        .replace(/^O personagem que você está pensando é\s*/i, '')
-        .replace(/^O personagem\s*/i, '')
-        .replace(/\?$/, '')
-        .trim();
-      const qClean = q.charAt(0).toUpperCase() + q.slice(1);
-      return `- ${qClean}: ${h.answer}`;
-    })
-    .join('\n');
-
-  log('FORCE_GUESS_FACTS', factsText);
-
-  // Tenta até 3 vezes com delay crescente
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      if (attempt === 2) {
-        log('FORCE_GUESS_RETRY', 'Tentativa 2 aguardando 1.5s...');
-        await sleep(1500);
-      } else if (attempt === 3) {
-        log('FORCE_GUESS_RETRY', 'Tentativa 3 aguardando 3s...');
-        await sleep(3000);
-      }
-
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          temperature: 0.2,
-          max_tokens: 80,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content:
-                'Você adivinha personagens fictícios, desenhos animados ou famosos com base em características.\n' +
-                'Considere personagens com superpoderes (ex: Goku, Ben Tennyson, Superman) e sem superpoderes (ex: Salsicha, Bob Esponja, Chaves).\n' +
-                'Você deve retornar OBRIGATORIAMENTE um objeto JSON válido no formato: {"nome": "Nome do Personagem"}.\n' +
-                'Não adicione nenhuma explicação, raciocínio ou texto fora do JSON.',
-            },
-            {
-              role: 'user',
-              content:
-                `Características:\n${factsText}\n\n` +
-                'Retorne o JSON com o nome do personagem:',
-            },
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP Error status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const raw  = (data.choices?.[0]?.message?.content ?? '').trim();
-      
-      if (!raw) {
-        log('FORCE_GUESS_EMPTY', `Tentativa ${attempt} retornou string vazia.`);
-        continue; // Pula para a próxima tentativa se vier vazio
-      }
-
-      log(`FORCE_GUESS_RAW_ATTEMPT_${attempt}`, { raw });
-
-      const parsedData = JSON.parse(raw);
-      
-      if (parsedData.nome) {
-        log('FORCE_GUESS_RESULT', { name: parsedData.nome });
-        return parsedData.nome;
-      } else {
-        throw new Error("JSON retornado não contém a chave 'nome'");
-      }
-
-    } catch (err) {
-      log(`FORCE_GUESS_ERROR_ATTEMPT_${attempt}`, String(err));
-      // Se for a última tentativa, o loop vai encerrar e cair no fallback inteligente
-    }
-  }
-
-  // Se esgotou as 3 tentativas e não retornou nada, usa o fallback baseado no histórico
-  log('FORCE_GUESS_FAILED', 'Todas as tentativas falharam. Usando Fallback Inteligente.');
-  const fallbackName = getIntelligentFallback(history);
-  log('FORCE_GUESS_FALLBACK', { name: fallbackName });
-  
-  return fallbackName;
-}
-
-// ─── Componente ───────────────────────────────────────────────────────────────
+// ─── Componente Principal ────────────────────────────────────────────────────
 
 export default function Game() {
   const [question, setQuestion]       = useState('');
@@ -234,6 +127,7 @@ export default function Game() {
       setFeedback(undefined);
       log('API_REQUEST', { questionNumber: state.history.length + 1 });
 
+      // Aqui chamamos o nosso serviço do groq.ts atualizado
       const result = await getNextQuestion(state);
 
       log('API_RESPONSE', {
@@ -244,20 +138,7 @@ export default function Game() {
         feedback: result.feedback ?? null,
       });
 
-      // ── Tratamento do __FORCE_GUESS__ ────────────────────────────────────────
-      if (result.character === '__FORCE_GUESS__') {
-        log('FORCE_GUESS_TRIGGERED', { atQuestion: state.history.length + 1 });
-        const guessedName = await forceGuessFromAPI(state.history);
-
-        setQuestion(`O personagem que você está pensando é ${guessedName}?`);
-        setReaction('confiante');
-        setIsGuess(true);
-        setCharacter(guessedName);
-        log('FORCE_GUESS_SET', { character: guessedName });
-        return;
-      }
-
-      // Valida a pergunta gerada
+      // Valida se a pergunta gerada pela IA é de Sim/Não
       const isValidQuestion = isValidYesNoQuestion(result.question);
       if (!isValidQuestion) {
         log('INVALID_QUESTION_DETECTED', { question: result.question });
@@ -267,13 +148,23 @@ export default function Game() {
       setQuestion(result.question);
       setReaction((result.reaction as GenieReaction) || 'neutro');
       setIsGuess(result.isGuess);
-      if (result.character) setCharacter(result.character);
-      if (result.feedback) setFeedback(result.feedback);
+      
+      if (result.character) {
+        setCharacter(result.character);
+      }
+      if (result.feedback) {
+        setFeedback(result.feedback);
+      }
 
     } catch (err) {
       log('API_ERROR', String(err));
-      setQuestion('Hmm, deixa eu pensar... O personagem é famoso?');
-      setReaction('reflexivo');
+      
+      // Se houver falha crítica de rede no meio da partida, usamos o fallback local
+      const fallbackName = getIntelligentFallback(state.history);
+      setQuestion(`Não consegui me conectar aos meus poderes místicos... É o ${fallbackName}?`);
+      setReaction('desesperado');
+      setIsGuess(true);
+      setCharacter(fallbackName);
     } finally {
       setLoading(false);
     }
@@ -344,7 +235,7 @@ export default function Game() {
 
       <Text style={gameStyles.counter}>Pergunta {questionNumber}</Text>
 
-      {/* ── Botão de Feedback (quando a IA faz pergunta composta) ────────────────── */}
+      {/* ── Botão de Feedback ── */}
       {feedback === 'invalid_question' && !loading && (
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
           <FeedbackButton 
@@ -361,7 +252,7 @@ export default function Game() {
 
       <View style={gameStyles.buttonsContainer}>
         {isGuess ? (
-          /* ── Modo chute: só Sim e Não, maiores e dramáticos ── */
+          /* ── Modo chute ── */
           <View style={guessStyles.container}>
             <Text style={guessStyles.hint}>É esse?</Text>
             <View style={guessStyles.row}>
@@ -389,7 +280,7 @@ export default function Game() {
             </View>
           </View>
         ) : (
-          /* ── Modo pergunta: todos os botões normais ── */
+          /* ── Modo pergunta ── */
           <>
             {buttonRows.map((row, rowIdx) => (
               <View key={rowIdx} style={gameStyles.buttonRow}>

@@ -38,6 +38,28 @@ export function isValidYesNoQuestion(question: string): boolean {
   return !invalidPatterns.some(p => p.test(q));
 }
 
+/**
+ * Impede que perguntas semanticamente idênticas sejam feitas caso os fallbacks locais sejam acionados.
+ */
+function isSemanticDuplicate(question: string, askedSet: Set<string>): boolean {
+  const q = question.toLowerCase();
+  const askedList = Array.from(askedSet);
+
+  if (q.includes('sexo masculino') || q.includes('homem')) {
+    return askedList.some(a => a.includes('sexo masculino') || a.includes('homem') || a.includes('masculino'));
+  }
+  if (q.includes('vivo') || q.includes('vida')) {
+    return askedList.some(a => a.includes('vivo') || a.includes('viva') || a.includes('vida'));
+  }
+  if (q.includes('brasileiro') || q.includes('brasil')) {
+    return askedList.some(a => a.includes('brasileiro') || a.includes('brasil'));
+  }
+  if (q.includes('atleta') || q.includes('esporte') || q.includes('futebol')) {
+    return askedList.some(a => a.includes('atleta') || a.includes('esporte') || a.includes('futebol') || a.includes('futebolista'));
+  }
+  return false;
+}
+
 export async function getNextQuestion(
   gameState: GameState,
   invalidQuestions: string[] = [],
@@ -55,7 +77,7 @@ export async function getNextQuestion(
       .map(h => normQ(h.question))
   );
 
-  // Pergunta 1: sempre fixa
+  // Pergunta 1: sempre fixa para definir a categoria base
   if (questionNumber === 1) {
     return { question: 'É uma pessoa real?', reaction: 'neutro', isGuess: false };
   }
@@ -83,7 +105,7 @@ export async function getNextQuestion(
 
   const category = inferCategory(gameState.history);
 
-  // Helpers de detecção
+  // Helpers de detecção de respostas anteriores
   const confirmedYes = (kw: string) => gameState.history.some(h =>
     h.question.toLowerCase().includes(kw) &&
     (h.answer === 'Sim' || h.answer === 'Prov. sim')
@@ -107,7 +129,7 @@ export async function getNextQuestion(
   const isLivro     = confirmedYes('livro');
 
   // Profissões reais
-  const isAtleta       = confirmedYes('atleta');
+  const isAtleta       = confirmedYes('atleta') || confirmedYes('esporte') || confirmedYes('futebol');
   const isMusico       = confirmedYes('músico') || confirmedYes('cantor') || confirmedYes('cantora');
   const isAtor         = confirmedYes('ator') || confirmedYes('atriz');
   const isApresentador = confirmedYes('apresentador');
@@ -117,7 +139,6 @@ export async function getNextQuestion(
   const isModelo       = confirmedYes('modelo');
   const isEmpresario   = confirmedYes('empresário') || confirmedYes('ceo');
 
-  // Contexto de mídia confirmada para fictício
   let ficticioPath = '';
   if (category === 'ficticio') {
     if (isAnime) {
@@ -197,19 +218,18 @@ export async function getNextQuestion(
     : category === 'ficticio'
     ? `✅ FICTÍCIO.\n${ficticioPath}`
     : '⚠️ Ainda não sabe se é real ou fictício.';
+
   const invalidCtx = invalidQuestions.length > 0
     ? `\n🚨 PERGUNTAS RECUSADAS PELO JOGADOR (não são sim/não):\n` +
       invalidQuestions.map(q => `- "${q}"`).join('\n') +
       '\nNUNCA faça perguntas nesse estilo.'
     : '';
 
-  // Feedback histórico do Firestore
   const feedbackCtx = recentFeedback.length > 0
     ? `\n📊 PERGUNTAS QUE JOGADORES JÁ RECUSARAM (evite):\n` +
       recentFeedback.slice(0, 5).map((f: any) => `- "${f.question}"`).join('\n')
     : '';
 
-  // Perguntas mais eficazes
   const effectiveCtx = topQuestions.length > 0
     ? `\nPERGUNTAS EFICAZES (prefira quando não feitas):\n` +
       topQuestions
@@ -227,7 +247,6 @@ export async function getNextQuestion(
         .join(', ')
     : '';
 
-  // Configuração de urgência e comportamento de chute forçado
   let urgency = 'Mapeie e aprofunde.';
   let forceGuessInstruction = '';
 
@@ -247,8 +266,11 @@ export async function getNextQuestion(
     .map((h, i) => `${i + 1}. "${h.question}" → ${h.answer}`)
     .join('\n');
 
+  const currentYear = new Date().getFullYear();
+
   try {
-    const response = await fetch('[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)', {
+    console.log('🔌 [DEBUG GROQ] Enviando requisição para a IA...');
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -256,9 +278,8 @@ export async function getNextQuestion(
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        temperature: 0.6,
+        temperature: 0.15, // Baixíssima temperatura para evitar alucinações e prezar pela lógica estrita
         max_tokens: 200,
-        // response_format garante que a resposta venha pura no formato JSON, impedindo textos extras da IA
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -269,11 +290,25 @@ export async function getNextQuestion(
 ${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REGRA ABSOLUTA: TODA PERGUNTA DEVE SER DE "SIM" OU "NÃO"
+CONTEXTO TEMPORAL DINÂMICO (ANO DE ${currentYear})
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ "É do sexo masculino?" "É brasileiro?" "É da Marvel?" "É de um anime?" "É apresentador?"
-❌ "É da Marvel ou DC?" "É músico ou ator?" "É de qual país?" "Como se chama?"
-NUNCA junte duas opções com "ou". Pergunte apenas uma única coisa objetiva por vez.
+⚠️ ESTAMOS ATUALMENTE NO ANO DE ${currentYear}! 
+- Se o histórico confirmou que o personagem "Está vivo? → Sim", você NUNCA pode chutar ou considerar alguém que faleceu antes ou durante o ano de ${currentYear} (Exemplo: Silvio Santos faleceu em 2024, portanto ele NÃO está vivo em ${currentYear}!).
+- Lembre-se de cruzar as datas biográficas do personagem com o ano de ${currentYear} para validar se a pessoa de fato estaria viva hoje.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGRA ABSOLUTA: PROIBIDO PERGUNTAS REPETITIVAS OU CUMULATIVAS (EVITE O LOOP)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+❌ NÃO CRIE perguntas longas apenas juntando adjetivos que você já sabe que são verdades! (Ex: Se já sabe que ele é "brasileiro", "apresentador" e "comediante", NUNCA pergunte "É um apresentador comediante brasileiro irreverente na TV aberta?"). Isso irrita o jogador e desperdiça rodadas!
+✅ FAÇA perguntas objetivas buscando NOVAS informações de eliminação (Ex: "Ficou conhecido na RedeTV ou na Band?", "Seu programa passava aos domingos?", "Tem cabelo comprido?", "Usa óculos?", "Ficou famoso no rádio antes da TV?", "Ficou famoso no programa Pânico?").
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGRA DE OURO: CONSISTÊNCIA LÓGICA MÁXIMA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Você NUNCA pode fazer uma pergunta ou dar um chute que contradiga as respostas dadas no histórico.
+Analise meticulosamente cada linha do histórico antes de tomar uma decisão:
+- Se o jogador respondeu "Sim" para "É brasileiro?", o seu personagem final DEVE ser brasileiro. Nunca chute um estrangeiro!
+- Se respondeu "Não" para "É ator?", não pergunte se ele fez novelas.
 
 ${urgency}${forceGuessInstruction}
 
@@ -291,33 +326,46 @@ FORMATO CASO SEJA CHUTE (isGuess deve ser true):
           {
             role: 'user',
             content: historyText
-              ? `Histórico de respostas recebidas:\n${historyText}\n\nGere a próxima ação para a rodada ${questionNumber} em JSON válido.`
+              ? `Histórico de respostas recebidas:\n${historyText}\n\nGere a próxima ação para a rodada ${questionNumber} em JSON válido de acordo com as regras de consistência.`
               : 'Gere a primeira ação em JSON válido.',
           },
         ],
       }),
     });
 
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error(`🔌 [DEBUG GROQ] Erro na API Groq (HTTP ${response.status}):`, errBody);
+      throw new Error(`HTTP ${response.status}: ${errBody}`);
+    }
+
     const data = await response.json();
-    const raw = data.choices?.[0]?.message?.content || '';
+    if (!data.choices || data.choices.length === 0) {
+      console.error('🔌 [DEBUG GROQ] Resposta da API vazia ou sem choices:', data);
+      throw new Error('Groq retornou choices vazio');
+    }
+
+    const raw = data.choices[0]?.message?.content || '';
+    console.log('🔌 [DEBUG GROQ] Resposta bruta da Groq:', raw);
     
-    // O response_format já garante um JSON válido, mas limpamos eventuais espaços/quebras
     const parsed = JSON.parse(raw.trim());
 
-    // Validamos se o robô não repetiu a pergunta e se é uma pergunta de sim/não válida
-    if (parsed.isGuess || (!askedSet.has(normQ(parsed.question ?? '')) && isValidYesNoQuestion(parsed.question ?? ''))) {
+    const isRepeated = askedSet.has(normQ(parsed.question ?? ''));
+    const isValidForm = isValidYesNoQuestion(parsed.question ?? '');
+
+    console.log('🔌 [DEBUG GROQ] Pergunta já feita?', isRepeated);
+    console.log('🔌 [DEBUG GROQ] Formato sim/não válido?', isValidForm);
+
+    // Se o robô gerou um chute ou uma pergunta válida e inédita, retornamos diretamente
+    if (parsed.isGuess || (!isRepeated && isValidForm)) {
       return parsed;
     }
 
-    // Se a IA gerou uma pergunta inválida ou repetida após a rodada 10, forçamos um chute manual
-    if (questionNumber > 10) {
-      return { question: 'Já sei quem é! Deixe-me tentar chutar.', reaction: 'confiante', isGuess: true, character: 'Neymar Jr' }; // Chute padrão de segurança
-    }
-  } catch (error) {
-    console.error('Erro na requisição ou parsing da Groq:', error);
+    console.log('⚠️ [DEBUG GROQ] Resposta da IA foi rejeitada (repetida ou inválida). Buscando pergunta de fallback...');
+  } catch (error: any) {
+    console.error('🚨 [DEBUG GROQ] Erro na requisição ou parsing da Groq:', error?.message || error);
   }
 
-  // ── SISTEMA DE FALLBACKS (caso a API falhe) ──────────────────────────────
   function shuffle<T>(arr: T[]): T[] {
     const a = [...arr];
     for (let i = a.length - 1; i > 0; i--) {
@@ -335,7 +383,7 @@ FORMATO CASO SEJA CHUTE (isGuess deve ser true):
   const realOpcionais = shuffle([
     { question: 'É atleta?',                       reaction: 'concentrado', isGuess: false },
     { question: 'É músico?',                       reaction: 'reflexivo',   isGuess: false },
-    { question: 'É actor?',                        reaction: 'inquieto',    isGuess: false },
+    { question: 'É ator?',                         reaction: 'inquieto',    isGuess: false },
     { question: 'É apresentador de TV?',           reaction: 'concentrado', isGuess: false },
     { question: 'É influencer ou youtuber?',       reaction: 'reflexivo',   isGuess: false },
     { question: 'É comediante?',                   reaction: 'inquieto',    isGuess: false },
@@ -377,8 +425,24 @@ FORMATO CASO SEJA CHUTE (isGuess deve ser true):
     ? fallbacksFicticio
     : [...ficticioAncoras, ...realAncoras, ...shuffle([...ficticioOpcionais, ...realOpcionais])];
 
-  const available = fallbacks.find(f => !askedSet.has(normQ(f.question)));
-  if (available) return available;
+  // Filtra fallbacks que sejam repetições semânticas das perguntas do histórico
+  const available = fallbacks.find(f => {
+    const isAsked = askedSet.has(normQ(f.question));
+    const isSemanticDup = isSemanticDuplicate(f.question, askedSet);
+    return !isAsked && !isSemanticDup;
+  });
 
-  return { question: 'Chegamos ao fim da linha! É hora de chutar.', reaction: 'confiante', isGuess: true, character: 'Goku' };
+  if (available) {
+    console.log(`🔌 [DEBUG GROQ] Fallback acionado: Perguntando "${available.question}"`);
+    return available;
+  }
+
+  // Chute de segurança definitivo baseado na categoria (caso tudo falhe)
+  const defaultGuess = category === 'real' ? 'Silvio Santos' : 'Goku';
+  return { 
+    question: `É o ${defaultGuess}?`, 
+    reaction: 'confiante', 
+    isGuess: true, 
+    character: defaultGuess 
+  };
 }
