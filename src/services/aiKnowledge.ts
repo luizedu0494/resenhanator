@@ -123,6 +123,195 @@ export async function getTopQuestions(limitCount = 20): Promise<QuestionStat[]> 
   }
 }
 
+// ─── AGENTE 2: Curadoria de Conhecimento ─────────────────────────────────────
+
+export interface CandidateMatch {
+  displayName: string;
+  score: number;          // compatibilidade: 0–100
+  matchedFacts: number;   // quantos fatos do histórico batem
+  totalFacts: number;     // quantos fatos a IA sabe sobre ele
+  contradictions: number; // fatos que contradizem o histórico
+}
+
+/**
+ * Compara o histórico atual da partida com os fatos conhecidos de um personagem.
+ * Retorna score de compatibilidade e lista de contradições.
+ */
+function scoreCandidate(
+  knowledge: CharacterKnowledge,
+  history: { question: string; answer: string }[]
+): CandidateMatch {
+  const facts = knowledge.knownFacts;
+  let matched = 0;
+  let contradictions = 0;
+
+  for (const h of history) {
+    if (h.answer === '__INVALIDA__') continue;
+    const key = normQuestion(h.question);
+
+    // Procura correspondência exata ou parcial nos fatos conhecidos
+    const knownAnswer = facts[key] ?? findPartialMatch(key, facts);
+    if (!knownAnswer) continue;
+
+    const playerAnswer = h.answer;
+    const isCompatible = answersCompatible(playerAnswer, knownAnswer);
+    if (isCompatible) {
+      matched++;
+    } else {
+      contradictions++;
+    }
+  }
+
+  const totalFacts = Object.keys(facts).length;
+  const historyLen = history.filter(h => h.answer !== '__INVALIDA__').length;
+
+  // Score: % de perguntas compatíveis, penalizado por contradições
+  const base = historyLen > 0 ? (matched / historyLen) * 100 : 0;
+  const penalty = contradictions * 25;
+  const score = Math.max(0, Math.round(base - penalty));
+
+  return {
+    displayName: knowledge.displayName,
+    score,
+    matchedFacts: matched,
+    totalFacts,
+    contradictions,
+  };
+}
+
+/** Busca correspondência parcial de pergunta no mapa de fatos */
+function findPartialMatch(key: string, facts: Record<string, string>): string | null {
+  const keyWords = key.split(' ').filter(w => w.length > 3);
+  for (const [factKey, factAnswer] of Object.entries(facts)) {
+    const matches = keyWords.filter(w => factKey.includes(w));
+    if (matches.length >= 2) return factAnswer;
+  }
+  return null;
+}
+
+/** Verifica se duas respostas são compatíveis */
+function answersCompatible(playerAnswer: string, knownAnswer: string): boolean {
+  const positive = new Set(['Sim', 'Prov. sim']);
+  const negative = new Set(['Não', 'Prov. não']);
+  const neutral  = new Set(['Talvez', 'Não sei']);
+
+  if (positive.has(playerAnswer) && positive.has(knownAnswer)) return true;
+  if (negative.has(playerAnswer) && negative.has(knownAnswer)) return true;
+  if (neutral.has(playerAnswer) || neutral.has(knownAnswer))   return true; // talvez não contradiz
+  if (positive.has(playerAnswer) && negative.has(knownAnswer)) return false;
+  if (negative.has(playerAnswer) && positive.has(knownAnswer)) return false;
+  return true;
+}
+
+/**
+ * AGENTE 2: Curadoria de Conhecimento
+ *
+ * Busca no Firestore os personagens mais conhecidos e ranqueia por
+ * compatibilidade com o histórico atual da partida.
+ *
+ * Retorna um bloco de contexto formatado para injetar no prompt da IA.
+ */
+export async function getCurationContext(
+  history: { question: string; answer: string }[],
+  category: 'real' | 'ficticio' | null,
+  alreadyGuessed: string[],
+  limitCount = 40
+): Promise<{ contextBlock: string; topCandidate: CandidateMatch | null }> {
+  try {
+    if (history.filter(h => h.answer !== '__INVALIDA__').length < 3) {
+      return { contextBlock: '', topCandidate: null };
+    }
+
+    // Busca os personagens mais jogados no Firestore
+    let q = query(
+      collection(db, 'characters'),
+      orderBy('timesThought', 'desc'),
+      limit(limitCount)
+    );
+
+    // Filtra por categoria se souber
+    if (category) {
+      q = query(
+        collection(db, 'characters'),
+        orderBy('timesThought', 'desc'),
+        limit(limitCount)
+      );
+    }
+
+    const snap = await getDocs(q);
+    if (snap.empty) return { contextBlock: '', topCandidate: null };
+
+    const guessedLower = new Set(alreadyGuessed.map(n => n.toLowerCase()));
+
+    const candidates: CandidateMatch[] = [];
+
+    for (const docSnap of snap.docs) {
+      const d = docSnap.data();
+
+      // Ignora personagens já chutados
+      if (guessedLower.has((d.displayName ?? '').toLowerCase())) continue;
+
+      // Filtra por categoria se aplicável
+      if (category && d.category && d.category !== category) continue;
+
+      // Ignora personagens sem fatos suficientes
+      const facts = d.knownFacts ?? {};
+      if (Object.keys(facts).length < 2) continue;
+
+      const knowledge: CharacterKnowledge = {
+        name:         docSnap.id,
+        displayName:  d.displayName ?? docSnap.id,
+        category:     d.category ?? '',
+        timesThought: d.timesThought ?? 0,
+        timesGuessed: d.timesGuessed ?? 0,
+        knownFacts:   facts,
+      };
+
+      const match = scoreCandidate(knowledge, history);
+
+      // Só inclui candidatos sem contradições graves
+      if (match.contradictions === 0 && match.score > 0) {
+        candidates.push(match);
+      }
+    }
+
+    if (candidates.length === 0) return { contextBlock: '', topCandidate: null };
+
+    // Ordena por score descendente
+    candidates.sort((a, b) => b.score - a.score);
+
+    const top3 = candidates.slice(0, 3);
+    const topCandidate = top3[0];
+
+    // Monta o bloco de contexto
+    const lines: string[] = [
+      '🔍 AGENTE DE CURADORIA — Candidatos compatíveis com as respostas atuais:',
+    ];
+
+    for (const c of top3) {
+      const bar = '█'.repeat(Math.round(c.score / 10)) + '░'.repeat(10 - Math.round(c.score / 10));
+      lines.push(`  • ${c.displayName}: ${bar} ${c.score}% (${c.matchedFacts} fatos batem)`);
+    }
+
+    if (topCandidate.score >= 70) {
+      lines.push(`\n🎯 CANDIDATO FORTE: ${topCandidate.displayName} (${topCandidate.score}% compatível). Confirme ou CHUTE!`);
+    } else if (topCandidate.score >= 40) {
+      lines.push(`\n💡 CANDIDATO PROVÁVEL: ${topCandidate.displayName} — faça 1 pergunta de confirmação se ainda tiver dúvida.`);
+    } else {
+      lines.push(`\n❓ Sem candidato forte ainda. Continue investigando.`);
+    }
+
+    return {
+      contextBlock: lines.join('\n'),
+      topCandidate,
+    };
+
+  } catch (err) {
+    console.warn('[aiKnowledge] getCurationContext falhou:', err);
+    return { contextBlock: '', topCandidate: null };
+  }
+}
+
 // ─── Escrita ─────────────────────────────────────────────────────────────────
 
 /**

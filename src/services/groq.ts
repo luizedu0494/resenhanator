@@ -3,7 +3,7 @@
  */
 
 import { loadAiMemory } from './history';
-import { getTopQuestions, getCharacterKnowledge } from './aiKnowledge';
+import { getTopQuestions, getCurationContext } from './aiKnowledge';
 import { getRecentInvalidQuestionFeedback } from './feedbackService';
 
 export interface GameState {
@@ -39,8 +39,8 @@ export function isValidYesNoQuestion(question: string): boolean {
 }
 
 /**
- * Impede que perguntas semanticamente idênticas sejam feitas caso os fallbacks locais sejam acionados.
- * FIX: Adicionadas detecções de variações de "rede de TV" e "programa de humor".
+ * AGENTE 1: Otimização de Estratégia
+ * Detecta loops semânticos e numéricos para evitar que a IA desperdice perguntas.
  */
 function isSemanticDuplicate(question: string, askedSet: Set<string>): boolean {
   const q = question.toLowerCase();
@@ -59,18 +59,66 @@ function isSemanticDuplicate(question: string, askedSet: Set<string>): boolean {
     return askedList.some(a => a.includes('atleta') || a.includes('esporte') || a.includes('futebol') || a.includes('futebolista'));
   }
 
-  // FIX: bloqueia variações de "qual rede de TV"
   const tvNetworks = ['globo', 'sbt', 'record', 'band', 'tv aberta', 'televisão aberta', 'rede de tv', 'rede de tele'];
   if (tvNetworks.some(n => q.includes(n))) {
     return askedList.some(a => tvNetworks.some(n => a.includes(n)));
   }
 
-  // FIX: bloqueia variações de "programa de humor/comédia"
   if (q.includes('programa de humor') || q.includes('programa de comédia')) {
     return askedList.some(a => a.includes('programa de humor') || a.includes('programa de comédia'));
   }
 
+  // ANTI-LOOP NUMÉRICO: bloqueia "mais de 1", "mais de 2"... sobre o mesmo tema
+  const numericPattern = /mais de (um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|\d+)/i;
+  if (numericPattern.test(q)) {
+    const themeKeywords = ['mvp', 'título', 'campeonato', 'gol', 'medalha', 'oscar', 'grammy', 'prêmio', 'copa', 'anel', 'trofeu', 'troféu'];
+    const matchedTheme = themeKeywords.find(t => q.includes(t));
+    if (matchedTheme) {
+      return askedList.some(a => a.includes(matchedTheme) && numericPattern.test(a));
+    }
+    return askedList.some(a => numericPattern.test(a));
+  }
+
   return false;
+}
+
+/**
+ * AGENTE 1: Detecção de Suficiência
+ * Analisa o histórico e retorna instrução de urgência se a IA já tem info suficiente pra chutar.
+ */
+function detectSufficiency(
+  history: { question: string; answer: string }[],
+  questionNumber: number
+): string {
+  const confirmedTopics = history
+    .filter(h => h.answer === 'Sim' || h.answer === 'Prov. sim')
+    .map(h => h.question.toLowerCase());
+
+  const topics = {
+    categoria:     confirmedTopics.some(q => q.includes('pessoa real') || q.includes('fictício') || q.includes('anime') || q.includes('cartoon') || q.includes('marvel') || q.includes('dc') || q.includes('videogame')),
+    genero:        confirmedTopics.some(q => q.includes('masculino') || q.includes('feminino') || q.includes('homem') || q.includes('mulher')),
+    nacionalidade: confirmedTopics.some(q => q.includes('brasileiro') || q.includes('americano') || q.includes('europeu') || q.includes('continente') || q.includes('americano')),
+    area:          confirmedTopics.some(q => q.includes('esporte') || q.includes('música') || q.includes('ator') || q.includes('apresentador') || q.includes('político') || q.includes('futebol') || q.includes('basquete') || q.includes('atleta')),
+    subarea:       confirmedTopics.some(q => q.includes('nba') || q.includes('nfl') || q.includes('seleção') || q.includes('rapper') || q.includes('sertanejo') || q.includes('funk') || q.includes('individual') || q.includes('coletivo')),
+    conquista:     confirmedTopics.some(q => q.includes('mvp') || q.includes('título') || q.includes('campeão') || q.includes('oscar') || q.includes('grammy')),
+  };
+
+  const count = Object.values(topics).filter(Boolean).length;
+
+  if (count >= 5 && questionNumber >= 8) {
+    return '\n🎯 AGENTE DE ESTRATÉGIA: Perfil completo detectado (5+ dimensões confirmadas). CHUTE AGORA — cada pergunta extra é desperdício!';
+  }
+  if (count >= 4 && questionNumber >= 10) {
+    return '\n🎯 AGENTE DE ESTRATÉGIA: Perfil bem definido. Faça no máximo 1 pergunta de refinamento e CHUTE.';
+  }
+
+  // Detecta loop numérico ativo
+  const numericAsked = history.filter(h => /mais de (um|dois|três|quatro|cinco|seis|\d+)/i.test(h.question));
+  if (numericAsked.length >= 2) {
+    return '\n⛔ AGENTE DE ESTRATÉGIA: Loop numérico detectado! Pare de contar prêmios/títulos — CHUTE o personagem agora!';
+  }
+
+  return '';
 }
 
 export async function getNextQuestion(
@@ -103,6 +151,15 @@ export async function getNextQuestion(
     getTopQuestions(15),
     getRecentInvalidQuestionFeedback(10),
   ]);
+
+  // ── AGENTE 2: Curadoria de Conhecimento ────────────────────────────────────
+  // (roda em paralelo com o restante da montagem do contexto)
+  const alreadyGuessedForCuration = memory.filter(m => m.wasGuessed).map(m => m.character).slice(0, 20);
+  const curationPromise = getCurationContext(
+    gameState.history,
+    inferCategory(gameState.history),
+    alreadyGuessedForCuration
+  );
 
   // ── Lista negra: personagens já jogados nesta sessão do jogador ──────────────
   const alreadyGuessed  = memory.filter(m => m.wasGuessed).map(m => m.character).slice(0, 20);
@@ -262,29 +319,28 @@ export async function getNextQuestion(
         .join(', ')
     : '';
 
-  // ── NOVO: Conhecimento coletivo do Firestore sobre possíveis personagens ───
+  // ── NOVO: Conhecimento coletivo do Firestore via Agente 2 ──────────────────
   let knownFactsCtx = '';
   try {
-    const candidates = playerFavorites.slice(0, 5);
-    const knowledgeResults = await Promise.all(
-      candidates.map(name => getCharacterKnowledge(name))
-    );
-    const factsLines: string[] = [];
-    for (const k of knowledgeResults) {
-      if (!k || Object.keys(k.knownFacts).length === 0) continue;
-      const facts = Object.entries(k.knownFacts)
-        .slice(0, 6)
-        .map(([q, a]) => `  "${q}" → ${a}`)
-        .join('\n');
-      factsLines.push(`📖 ${k.displayName} (jogado ${k.timesThought}x, acertado ${k.timesGuessed}x):\n${facts}`);
+    const { contextBlock, topCandidate } = await curationPromise;
+    if (contextBlock) {
+      knownFactsCtx = `\n\n${contextBlock}`;
     }
-    if (factsLines.length > 0) {
-      knownFactsCtx = `\n\n🧠 FATOS CONHECIDOS (base coletiva de partidas anteriores — use para calibrar chutes):\n${factsLines.join('\n\n')}`;
+
+    // Se o candidato for muito forte e estivermos perto do limite, forçar chute
+    if (
+      topCandidate &&
+      topCandidate.score >= 85 &&
+      questionNumber >= 7 &&
+      !isForceGuess
+    ) {
+      knownFactsCtx += `\n\n🚨 AGENTE 2 OVERRIDE: Compatibilidade de ${topCandidate.score}% com "${topCandidate.displayName}". CHUTE IMEDIATAMENTE (isGuess: true, character: "${topCandidate.displayName}").`;
     }
   } catch {
-    // silencioso — não quebra o jogo se falhar
+    // silencioso
   }
 
+  const sufficiencyCtx = detectSufficiency(gameState.history, questionNumber);
   let urgency = 'Mapeie e aprofunde.';
   let forceGuessInstruction = '';
 
@@ -332,7 +388,7 @@ CONTEXTO: Ano ${currentYear}. Se vivo, deve estar vivo hoje.
 REGRAS: Sem perguntas repetitivas/cumulativas. Busque NOVAS informações.
 LÓGICA: NUNCA contradiga o histórico. Se já sabe quem é, CHUTE.
 
-${urgency}${forceGuessInstruction}
+${sufficiencyCtx}${urgency}${forceGuessInstruction}
 ${alreadyGuessed.length > 0 ? `NÃO CHUTE: ${alreadyGuessed.join(', ')}.` : ''}
 
 Responda APENAS JSON:
