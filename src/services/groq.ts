@@ -3,7 +3,7 @@
  */
 
 import { loadAiMemory } from './history';
-import { getTopQuestions } from './aiKnowledge';
+import { getTopQuestions, getCharacterKnowledge } from './aiKnowledge';
 import { getRecentInvalidQuestionFeedback } from './feedbackService';
 
 export interface GameState {
@@ -262,6 +262,29 @@ export async function getNextQuestion(
         .join(', ')
     : '';
 
+  // ── NOVO: Conhecimento coletivo do Firestore sobre possíveis personagens ───
+  let knownFactsCtx = '';
+  try {
+    const candidates = playerFavorites.slice(0, 5);
+    const knowledgeResults = await Promise.all(
+      candidates.map(name => getCharacterKnowledge(name))
+    );
+    const factsLines: string[] = [];
+    for (const k of knowledgeResults) {
+      if (!k || Object.keys(k.knownFacts).length === 0) continue;
+      const facts = Object.entries(k.knownFacts)
+        .slice(0, 6)
+        .map(([q, a]) => `  "${q}" → ${a}`)
+        .join('\n');
+      factsLines.push(`📖 ${k.displayName} (jogado ${k.timesThought}x, acertado ${k.timesGuessed}x):\n${facts}`);
+    }
+    if (factsLines.length > 0) {
+      knownFactsCtx = `\n\n🧠 FATOS CONHECIDOS (base coletiva de partidas anteriores — use para calibrar chutes):\n${factsLines.join('\n\n')}`;
+    }
+  } catch {
+    // silencioso — não quebra o jogo se falhar
+  }
+
   let urgency = 'Mapeie e aprofunde.';
   let forceGuessInstruction = '';
 
@@ -303,7 +326,7 @@ export async function getNextQuestion(
             content:
 `Você é o Resenhanator, gênio que adivinha personagens. Pergunta ${questionNumber}.
 
-${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}
+${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}${knownFactsCtx}
 
 CONTEXTO: Ano ${currentYear}. Se vivo, deve estar vivo hoje.
 REGRAS: Sem perguntas repetitivas/cumulativas. Busque NOVAS informações.
