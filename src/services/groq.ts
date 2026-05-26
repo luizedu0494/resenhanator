@@ -4,6 +4,7 @@
 
 import { loadAiMemory } from './history';
 import { getTopQuestions, getCurationContext } from './aiKnowledge';
+import { getPlayerProfile, buildPersonalizationContext } from './playerPersonalization';
 import { getRecentInvalidQuestionFeedback } from './feedbackService';
 
 export interface GameState {
@@ -146,10 +147,11 @@ export async function getNextQuestion(
   // Hard limit: Se passar de 20 perguntas, a IA DEVE chutar o melhor personagem possível baseado no histórico.
   const isForceGuess = questionNumber > 20;
 
-  const [memory, topQuestions, recentFeedback] = await Promise.all([
+  const [memory, topQuestions, recentFeedback, playerProfile] = await Promise.all([
     loadAiMemory(),
     getTopQuestions(15),
     getRecentInvalidQuestionFeedback(10),
+    getPlayerProfile(),
   ]);
 
   // ── AGENTE 2: Curadoria de Conhecimento ────────────────────────────────────
@@ -341,6 +343,7 @@ export async function getNextQuestion(
   }
 
   const sufficiencyCtx = detectSufficiency(gameState.history, questionNumber);
+  const personalizationCtx = buildPersonalizationContext(playerProfile);
   let urgency = 'Mapeie e aprofunde.';
   let forceGuessInstruction = '';
 
@@ -382,7 +385,7 @@ export async function getNextQuestion(
             content:
 `Você é o Resenhanator, gênio que adivinha personagens. Pergunta ${questionNumber}.
 
-${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}${knownFactsCtx}
+${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}${knownFactsCtx}${personalizationCtx}
 
 CONTEXTO: Ano ${currentYear}. Se vivo, deve estar vivo hoje.
 REGRAS: Sem perguntas repetitivas/cumulativas. Busque NOVAS informações.

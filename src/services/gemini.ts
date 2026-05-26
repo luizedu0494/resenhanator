@@ -4,6 +4,7 @@
 
 import { loadAiMemory } from './history';
 import { getTopQuestions, getCurationContext } from './aiKnowledge';
+import { getPlayerProfile, buildPersonalizationContext } from './playerPersonalization';
 import { getRecentInvalidQuestionFeedback } from './feedbackService';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -144,10 +145,11 @@ export async function getNextQuestion(
 
   const isForceGuess = questionNumber > 20;
 
-  const [memory, topQuestions, recentFeedback] = await Promise.all([
+  const [memory, topQuestions, recentFeedback, playerProfile] = await Promise.all([
     loadAiMemory(),
     getTopQuestions(15),
     getRecentInvalidQuestionFeedback(10),
+    getPlayerProfile(),
   ]);
 
   const alreadyGuessed  = memory.filter(m => m.wasGuessed).map(m => m.character).slice(0, 20);
@@ -327,6 +329,7 @@ export async function getNextQuestion(
   }
 
   const sufficiencyCtx = detectSufficiency(gameState.history, questionNumber);
+  const personalizationCtx = buildPersonalizationContext(playerProfile);
   let urgency = 'Mapeie e aprofunde.';
   let forceGuessInstruction = '';
 
@@ -358,7 +361,7 @@ export async function getNextQuestion(
 
     const systemPrompt = `Você é o Resenhanator, gênio que adivinha personagens. Pergunta ${questionNumber}.
 
-${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}${knownFactsCtx}
+${categoryCtx}${neverRepeatCtx}${playerProfileCtx}${invalidCtx}${feedbackCtx}${effectiveCtx}${askedCtx}${knownFactsCtx}${personalizationCtx}
 
 CONTEXTO: Ano ${currentYear}. Se vivo, deve estar vivo hoje.
 REGRAS: Sem perguntas repetitivas/cumulativas. Busque NOVAS informações.
