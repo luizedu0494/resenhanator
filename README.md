@@ -116,4 +116,4 @@ Feito por **Luiz Eduardo** — [github.com/luizedu0494](https://github.com/luize
 
 ## 🤖 Uso de Inteligência Artificial
 
-Este projeto foi desenvolvido com auxílio de ferramentas de Inteligência Artificial, utilizadas como suporte na criação de lógica, estruturação de código e documentação.
+Este projeto foi desenvolvido com auxílio de ferramentas de Inteligência Artificial, utilizadas como suporte na criação de lógica, estruturação de código e documentação."# DecifrAI-SQL-" 
