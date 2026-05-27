@@ -80,6 +80,45 @@ function isSemanticDuplicate(question: string, askedSet: Set<string>): boolean {
     return askedList.some(a => numericPattern.test(a));
   }
 
+  // ANTI-LOOP DE GÊNERO MUSICAL
+  const musicGenres = ['rock', 'pop', 'sertanejo', 'funk', 'eletrônica', 'eletronica', 'folk', 'clássica', 'classica', 'jazz', 'gospel', 'pagode', 'forró', 'forro', 'reggae', 'blues', 'soul', 'r&b', 'indie', 'metal', 'country', 'axé', 'axe', 'bossa nova', 'mpb'];
+  const isMusicGenreQ = musicGenres.some(g => q.includes(g)) &&
+    (q.includes('cantor') || q.includes('música') || q.includes('musica') || q.includes('artista') || q.includes('banda'));
+  if (isMusicGenreQ) {
+    const genreAskedCount = askedList.filter(a =>
+      musicGenres.some(g => a.includes(g)) &&
+      (a.includes('cantor') || a.includes('música') || a.includes('musica') || a.includes('artista') || a.includes('banda'))
+    ).length;
+    if (genreAskedCount >= 2) return true; // 3ª pergunta de gênero = loop, bloqueia
+  }
+
+  // ANTI-LOOP GEOGRÁFICO: bloqueia busca binária de continentes/países/regiões
+  // Ex: europeia? → asiática? → africana? → Oceania? ...
+  const geoKeywords = ['europei', 'asiátic', 'african', 'áfric', 'oceania', 'oriente médio', 'américa do sul', 'américa do norte', 'américa central', 'caribe', 'escandinav', 'mediterrâneo', 'balkã'];
+  const isGeoQ = geoKeywords.some(g => q.includes(g));
+  if (isGeoQ) {
+    const geoAskedCount = askedList.filter(a => geoKeywords.some(g => a.includes(g))).length;
+    if (geoAskedCount >= 2) return true;
+  }
+
+  // ANTI-LOOP DE PERGUNTAS COMPOSTAS CRESCENTES
+  // Ex: 'líder que faz fronteira...' → '...E tem carreira longa' → '...E é do sul'
+  // Detecta quando a pergunta é uma versão mais longa de uma já feita
+  if (q.length > 80) {
+    const longQBase = q.substring(0, 60);
+    const isSupersetOfAsked = askedList.some(a => a.length > 50 && q.startsWith(a.substring(0, 50)));
+    if (isSupersetOfAsked) return true;
+  }
+
+  // ANTI-LOOP GENÉRICO: 3+ variações do mesmo padrão já perguntadas
+  // Ex: 'é cantor de X?', 'é cantor de Y?', 'é cantor de Z?' → deve chutar
+  const prefixPattern = q.match(/^(essa pessoa é um? )?(cantor|ator|atleta|jogador|apresentador|político|músico|artista) (de |que )?/i);
+  if (prefixPattern) {
+    const prefix = prefixPattern[0].toLowerCase();
+    const samePrefix = askedList.filter(a => a.toLowerCase().startsWith(prefix));
+    if (samePrefix.length >= 3) return true;
+  }
+
   return false;
 }
 
@@ -98,9 +137,25 @@ function detectSufficiency(
   const topics = {
     categoria:     confirmedTopics.some(q => q.includes('pessoa real') || q.includes('fictício') || q.includes('anime') || q.includes('cartoon') || q.includes('marvel') || q.includes('dc') || q.includes('videogame')),
     genero:        confirmedTopics.some(q => q.includes('masculino') || q.includes('feminino') || q.includes('homem') || q.includes('mulher')),
-    nacionalidade: confirmedTopics.some(q => q.includes('brasileiro') || q.includes('americano') || q.includes('europeu') || q.includes('continente') || q.includes('americano')),
-    area:          confirmedTopics.some(q => q.includes('esporte') || q.includes('música') || q.includes('ator') || q.includes('apresentador') || q.includes('político') || q.includes('futebol') || q.includes('basquete') || q.includes('atleta')),
-    subarea:       confirmedTopics.some(q => q.includes('nba') || q.includes('nfl') || q.includes('seleção') || q.includes('rapper') || q.includes('sertanejo') || q.includes('funk') || q.includes('individual') || q.includes('coletivo')),
+    nacionalidade: confirmedTopics.some(q =>
+      q.includes('brasileiro') || q.includes('americano') || q.includes('europeu') ||
+      q.includes('continente') || q.includes('américa do sul') || q.includes('américa do norte') ||
+      q.includes('asiátic') || q.includes('african') || q.includes('áfric') || q.includes('oceania') ||
+      q.includes('fronteira') || q.includes('europeia') || q.includes('oriente médio')
+    ),
+    area:          confirmedTopics.some(q =>
+      q.includes('esporte') || q.includes('música') || q.includes('ator') ||
+      q.includes('apresentador') || q.includes('político') || q.includes('futebol') ||
+      q.includes('basquete') || q.includes('atleta') || q.includes('cantor') || q.includes('cientista')
+    ),
+    subarea:       confirmedTopics.some(q =>
+      q.includes('nba') || q.includes('nfl') || q.includes('seleção') ||
+      q.includes('rapper') || q.includes('sertanejo') || q.includes('funk') ||
+      q.includes('individual') || q.includes('coletivo') ||
+      q.includes('chefe de estado') || q.includes('governante') || q.includes('presidente') ||
+      q.includes('primeiro-ministro') || q.includes('ditador') || q.includes(' rei ') || q.includes('rainha') ||
+      q.includes('rock') || q.includes('pop') || q.includes('samba') || q.includes('pagode')
+    ),
     conquista:     confirmedTopics.some(q => q.includes('mvp') || q.includes('título') || q.includes('campeão') || q.includes('oscar') || q.includes('grammy')),
   };
 
@@ -117,6 +172,19 @@ function detectSufficiency(
   const numericAsked = history.filter(h => /mais de (um|dois|três|quatro|cinco|seis|\d+)/i.test(h.question));
   if (numericAsked.length >= 2) {
     return '\n⛔ AGENTE DE ESTRATÉGIA: Loop numérico detectado! Pare de contar prêmios/títulos — CHUTE o personagem agora!';
+  }
+
+  // Detecta loop geográfico ativo
+  const geoKeywords = ['europei', 'asiátic', 'african', 'áfric', 'oceania', 'américa do sul', 'américa do norte'];
+  const geoAsked = history.filter(h => geoKeywords.some(g => h.question.toLowerCase().includes(g)));
+  if (geoAsked.length >= 2) {
+    return '\n⛔ AGENTE DE ESTRATÉGIA: Loop geográfico detectado! Já varreu continentes/regiões demais. Use o que sabe e CHUTE agora!';
+  }
+
+  // Detecta loop de perguntas compostas crescentes
+  const longCompositeQuestions = history.filter(h => h.question.length > 80);
+  if (longCompositeQuestions.length >= 2) {
+    return '\n⛔ AGENTE DE ESTRATÉGIA: Perguntas compostas demais! Em vez de acumular condições numa só pergunta, CHUTE o personagem diretamente.';
   }
 
   return '';

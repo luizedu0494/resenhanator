@@ -6,7 +6,7 @@ import {
 import { router } from 'expo-router';
 import { globalStyles, colors } from '../../styles/global';
 import { gameStyles, guessStyles } from '../../styles/game';
-import { getNextQuestion, GameState, isValidYesNoQuestion } from '../../services/ai';
+import { getNextQuestion, GameState, isValidYesNoQuestion, resetAiFailureCount } from '../../services/ai';
 import { Alert } from 'react-native';
 import { GameButton } from '../../components/GameButton';
 import { FeedbackButton } from '../../components/FeedbackButton';
